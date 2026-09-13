@@ -20,7 +20,7 @@ We identified three main problems:
 
 ### Tool Fragmentation
 
-Group travellers must switch between messaging apps, spreadsheets, mapping tools, booking platforms, and other travel services to manage different parts of the same trip.
+Group travellers must switch between spreadsheets, mapping tools, booking platforms, and other travel services to manage different parts of the same trip.
 
 ### Consensus Paralysis & Mental Load
 
