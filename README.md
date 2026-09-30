@@ -297,7 +297,14 @@ Eggsplore is an all-in-one AI travel planning platform engineered to eliminate t
 
 Built as a cross-platform mobile app using React Native (Expo), styled with NativeWind, and powered by a Supabase backend. The AI logic is driven by Google Gemini Flash, integrated with Mapbox and Open-Meteo. The architecture and UI were heavily refined through mentor feedback, specifically optimizing the app to reduce AI token costs by shifting live crowd data into on-demand chat prompts, ensuring a highly scalable and cost-effective MVP.
 
+# How to run
+# From the folder containing package.json:
+npm ci
 
+# After entering Supabase values:
+npm run build
+npm run typecheck
+npm run dev
 
 
 
