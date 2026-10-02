@@ -49,16 +49,16 @@ queries. No new database migration is required by this Expo conversion.
 
 ## Current scope
 
-| Feature | Status |
-| --- | --- |
-| Email/password signup, login, logout, persistent session, protected routes | Implemented; requires your Supabase configuration |
-| Home, logo, background, mascot, real OS status bar, four-tab navigation | Migrated to native components |
-| Account editing, password change, emergency contact, destination notes, settings | Migrated |
-| Preference profiles: create, edit, delete, categories, pace, companions, spending order, interests | Migrated; existing JSON format preserved |
-| Trip creation, trip list, date filters, basic trip detail | Implemented to replace the old dead Create Trip link |
-| Candidate pool, voting, AI itinerary generation | Planned: Module B |
-| Native Mapbox, Ask AI, weather/flight disruptions | Planned: Module C; map currently shows a placeholder |
-| Budget, split logic, price estimates, notification delivery | Planned: Module D |
+| Feature                                                                                            | Status                                               |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Email/password signup, login, logout, persistent session, protected routes                         | Implemented; requires your Supabase configuration    |
+| Home, logo, background, mascot, real OS status bar, four-tab navigation                            | Migrated to native components                        |
+| Account editing, password change, emergency contact, destination notes, settings                   | Migrated                                             |
+| Preference profiles: create, edit, delete, categories, pace, companions, spending order, interests | Migrated; existing JSON format preserved             |
+| Trip creation, trip list, date filters, basic trip detail                                          | Implemented to replace the old dead Create Trip link |
+| Candidate pool, voting, AI itinerary generation                                                    | Planned: Module B                                    |
+| Native Mapbox, Ask AI, weather/flight disruptions                                                  | Planned: Module C; map currently shows a placeholder |
+| Budget, split logic, price estimates, notification delivery                                        | Planned: Module D                                    |
 
 Google/Facebook/Apple sign-in, magic links, and MFA flows are not included.
 Supabase email confirmation may still be enabled for signup; that is separate
@@ -95,6 +95,17 @@ Native Mapbox needs a custom development build; it does not run in Expo Go.
 Remote push notifications also need their own native setup and testing. Install
 these integrations when their owning module is implemented, not just to make
 the dependency list look complete.
+
+## PostCSS error in a leftover Next.js folder
+
+If Metro reports `Loading PostCSS "autoprefixer" plugin failed`, the Expo
+folder still contains a Next.js `postcss.config.mjs`. Rename that old config in
+the Expo project root and restart with `npx expo start --clear`. Expo Metro uses
+NativeWind's `metro.config.js`; do not install autoprefixer to mask this error.
+
+NativeWind is configured for class-based dark mode to support Expo's web color
+scheme handling. Keep `darkMode: "class"` in `tailwind.config.js`; changing it
+to media mode can crash the web runtime when Expo updates the color scheme.
 
 ## References
 

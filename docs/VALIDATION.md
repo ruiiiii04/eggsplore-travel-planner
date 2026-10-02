@@ -9,6 +9,7 @@ Recorded 2026-10-02. Tests used the migrated source, not the previous Next.js ap
   chronological trip validation, inclusive status boundaries, device-local date
   formatting and Supabase plain-object error messages.
 - Expo dependency alignment: `npx expo install --check`.
+- NativeWind uses class-based dark mode for Expo web color-scheme compatibility.
 - JavaScript/assets export for Android, iOS and web: `npm run build`.
 - Chromium UI smoke tests against a mocked Supabase endpoint: signup mismatch
   rejection and email-confirmation message, failed/successful login, restored

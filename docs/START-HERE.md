@@ -77,6 +77,40 @@ npm start -- --go --tunnel
 Expo may ask to install tunnel support. VPNs and campus networks can block local
 device access. The previous Next.js allowedDevOrigins setting is no longer used.
 
+### PostCSS autoprefixer error
+
+If Metro says `Loading PostCSS "autoprefixer" plugin failed`, Expo found an old
+Next.js `postcss.config.mjs`. In PowerShell, from the Expo project folder:
+
+```powershell
+Get-Location
+Get-ChildItem -Force postcss.config.*
+```
+
+If `postcss.config.mjs` appears, rename it so Metro no longer loads it:
+
+```powershell
+Rename-Item postcss.config.mjs postcss.config.mjs.disabled
+npx expo start --clear
+```
+
+The migrated Expo project uses `metro.config.js` and NativeWind. It does not
+need Next.js's PostCSS/autoprefixer config. If there is no PostCSS config, check
+that `Get-Location` is the extracted Expo project root containing the delivered
+package.json and metro.config.js, then run `npm ci` and `npx expo start --clear`.
+The Expo archive has no `postcss.config.mjs`; this error usually means it was
+extracted over the old Next.js folder and an obsolete file remained.
+
+Expo may update the `include` field in tsconfig.json when Router runs. That
+message is normal. Keep Expo's updated tsconfig.json.
+
+If web reports `Cannot manually set color scheme, as dark mode is type 'media'`,
+confirm `tailwind.config.js` contains `darkMode: "class"`. Then restart Metro:
+
+```powershell
+npx expo start --web --clear
+```
+
 Browser preview:
 
 ```powershell
@@ -176,14 +210,14 @@ npm start -- --go
 
 ## Troubleshooting
 
-| Symptom | Check |
-| --- | --- |
-| Supabase configuration message | .env names, values, project URL; restart with --clear |
-| Invalid credentials | Same Supabase project, correct email/password, email confirmation |
-| Profile loading fails | Signup profile trigger, profiles row, SELECT RLS; do not insert arbitrary profiles |
-| Trip creation fails | profiles row, trip INSERT RLS, owner-membership trigger |
-| Profile changed on another device | Retry; guarded update prevented a lost edit |
-| Module not found | Correct project folder, npm ci completed, matching package-lock |
-| Expo Go SDK mismatch | Use compatible Expo Go or build a development client |
-| Missing public environment values in APK | Configure the EAS environment and rebuild |
-| No notification arrives | Delivery is not implemented; toggle only saves a preference |
+| Symptom                                  | Check                                                                              |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| Supabase configuration message           | .env names, values, project URL; restart with --clear                              |
+| Invalid credentials                      | Same Supabase project, correct email/password, email confirmation                  |
+| Profile loading fails                    | Signup profile trigger, profiles row, SELECT RLS; do not insert arbitrary profiles |
+| Trip creation fails                      | profiles row, trip INSERT RLS, owner-membership trigger                            |
+| Profile changed on another device        | Retry; guarded update prevented a lost edit                                        |
+| Module not found                         | Correct project folder, npm ci completed, matching package-lock                    |
+| Expo Go SDK mismatch                     | Use compatible Expo Go or build a development client                               |
+| Missing public environment values in APK | Configure the EAS environment and rebuild                                          |
+| No notification arrives                  | Delivery is not implemented; toggle only saves a preference                        |
