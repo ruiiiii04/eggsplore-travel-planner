@@ -1,28 +1,9 @@
-'use client';
-import * as React from 'react';
-
-import { cn } from '@/lib/utils';
-
-export interface CardProps
-  extends React.HTMLAttributes<HTMLDivElement> {}
-
-export const Card = React.forwardRef<
-  HTMLDivElement,
-  CardProps
->(({ className, children, ...props }, ref) => {
+import { View, type ViewProps } from "react-native";
+export function Card({ className = "", ...props }: ViewProps) {
   return (
-    <div
-      ref={ref}
-      className={cn(
-        'rounded-xl border border-surface-border',
-        'bg-surface-card p-4 shadow-card',
-        className
-      )}
+    <View
       {...props}
-    >
-      {children}
-    </div>
+      className={`rounded-lg border border-line bg-white p-4 gap-3 ${className}`}
+    />
   );
-});
-
-Card.displayName = 'Card';
+}

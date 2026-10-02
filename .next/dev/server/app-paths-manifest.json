@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(tabs)/home/page": "app/(tabs)/home/page.js",
+  "/(tabs)/trips/page": "app/(tabs)/trips/page.js",
+  "/(tabs)/map/page": "app/(tabs)/map/page.js",
+  "/(tabs)/profile/page": "app/(tabs)/profile/page.js",
+  "/(tabs)/profile/new/page": "app/(tabs)/profile/new/page.js"
+}

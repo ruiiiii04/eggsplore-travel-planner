@@ -1,180 +1,223 @@
-# Eggsplore: step-by-step setup and remaining work
+# Start Here: Expo Migration
 
-## 1. Use the corrected project
+## 1. Use the migrated folder
 
-Keep your original folder as a backup. Extract `eggsplore-travel-planner-fixed.zip` into a NEW folder. Open the extracted `eggsplore-travel-planner` folder in VS Code. Do not copy this over your existing folder: the old `src/app/tabs`, `src/app/trips/page.tsx` and misplaced login file must not remain alongside the corrected routes.
+Extract the delivered archive into a fresh folder. Do not paste it over the old
+Next.js node_modules. Keep your old folder as a backup until phone testing is
+complete. Open the new folder containing package.json in VS Code.
 
-The repair updates Next.js 14.2.35 / React 18.3.1 to Next.js 16.3.7 / React 19.3.0, with matching React types. The prior dependency audit reported one critical and one high issue; the corrected lockfile reports zero. Tailwind stays on v3.4.17. Tell your teammates about the framework change before merging it. `archiutecture.md` remains the original reference; its version and colour table are stale. The actual centralized colour contract is `src/styles/theme.ts`.
+## 2. Install tools
 
-The build/dev scripts use Webpack explicitly. Turbopack could not run its compiler subprocess in the checking environment; Webpack completed the production build. `npm run lint` currently checks TypeScript only; there is no ESLint configuration.
+Install Node.js 22 LTS (22.13+) or Node.js 24 LTS (24.3+) and Git. For quick phone
+testing, install Expo Go on the phone. This project targets Expo SDK 57; the Expo
+Go version must support that SDK. If it does not, use a compatible development
+build instead. You do not install Next.js, Python, or the Supabase database on
+your laptop to run this mobile project.
 
-## 2. Check Node and install
-
-Open VS Code → Terminal → New Terminal. These are PowerShell commands:
+In the VS Code PowerShell terminal:
 
 ```powershell
 node --version
 npm --version
-```
-
-Use Node 22 or newer. Then, from the folder containing `package.json`:
-
-```powershell
 npm ci
-npm list next react react-dom
-npm run typecheck
-npm audit
+Copy-Item .env.example .env
 ```
 
-Expected versions: Next 16.3.7, React/React DOM 19.3.0. Typecheck should exit without diagnostics. The audit was zero at the time of checking; newer advisories can change that. Do not independently downgrade Next to 14 or install mismatched React versions. Do not use `--force` or `--legacy-peer-deps` to bypass a conflict.
+## 3. Connect your existing Supabase project
 
-If `npm ci` says the lockfile is out of sync, first ensure you extracted the supplied package.json AND package-lock.json together. The supplied pair was validated. If VS Code still displays old errors: Ctrl+Shift+P → TypeScript: Restart TS Server.
+Open .env and enter the URL and publishable key (or legacy anon key) from your
+existing project. Rename your previous NEXT_PUBLIC values to these names:
 
-## 3. Configure Supabase
-
-Create/open your Supabase project. Copy its project URL and browser-safe publishable key (or legacy anon key). In the corrected project root:
-
-```powershell
-Copy-Item .env.example .env.local
+```dotenv
+EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY
 ```
 
-Open `.env.local` and replace both placeholders:
+Do not paste a secret or service-role key. Do not send passwords or private keys
+to teammates through the repository. Every teammate creates their own ignored
+.env using the public values.
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_OR_PUBLISHABLE_KEY
-```
+Keep Email/password enabled in Supabase Auth. Social providers and MFA are not
+needed. Existing accounts can use the same email and password. Signup may require
+email confirmation depending on your Supabase settings. After confirming the
+email, return to the app and log in manually; no magic-link login flow is built.
+Configure the project's confirmation redirect to a reachable URL under your
+control if the existing redirect points to localhost.
 
-The second variable can contain a publishable key even though its name says ANON_KEY. Never use a service-role or secret key here. Restart the dev server after any env change. Before real values are supplied, Login displays a setup message and disables authentication; this is expected.
+If your existing schema works, do not rerun 001_foundation.sql. For a genuinely
+new empty Supabase project only, execute that migration once. Never drop existing
+tables to fix a migration error. verify-foundation.sql is read-only, but does not
+prove user-level RLS behavior.
 
-## 4. Create the database
-
-The ZIP contains `supabase/migrations/001_foundation.sql`.
-
-For a NEW/empty Supabase project: open SQL Editor → New query, paste the whole file, and Run once. It runs in one transaction. It creates profiles, trips, trip_members, expenses, itinerary_items, indexes, signup/profile triggers, automatic owner membership, updated_at triggers, RLS and policies.
-
-If these tables already exist, DO NOT drop them or run the migration blindly. Compare the current schema first and create an incremental migration. The supplied file intentionally fails on existing objects instead of replacing data.
-
-After successful setup, Table Editor should show five tables. Run `supabase/verify-foundation.sql` to inspect the RLS flags and policies. This inspection does not prove user isolation by itself: repeat the two-account checks below against your real Supabase instance.
-
-Current permission contract:
-- Users read/update their own profile, including private preferences/emergency contact fields.
-- Trip owner creates/edits/deletes trips and adds/removes ordinary members.
-- Trip members read their trip, members, expenses and itinerary.
-- Owner manages expenses/itinerary. Other members cannot write these yet.
-- Users cannot self-join, promote roles or transfer ownership.
-- Public profile/member directory, invitation acceptance and richer member editing require additional design.
-
-## 5. Configure authentication redirects
-
-In Supabase → Authentication → URL Configuration:
-
-- Site URL: `http://localhost:3000`
-- Additional redirect URL: `http://localhost:3000/home`
-
-If you use a different origin or port, add that exact `/home` URL too. This project uses the standard Supabase browser client with persisted browser sessions and direct `/home` redirects; it does not use cookie-based SSR/PKCE callback handlers. The client login guard controls UI access; database RLS controls data access. Future API routes/server actions must validate the user separately.
-
-Enable Email authentication. Configure the email service/template and sending limits appropriate for your project. The default magic-link template should use Supabase's confirmation URL; a custom token_hash/PKCE template would require a corresponding callback implementation.
-
-## 6. Enable Google sign-in
-
-In Google Cloud Console:
-1. Create/select the project and configure the OAuth consent screen.
-2. Create an OAuth client of type Web application.
-3. Set the authorized JavaScript origin to `http://localhost:3000`.
-4. Set the authorized redirect URI to the callback URL shown in Supabase's Google provider panel, normally `https://YOUR_PROJECT_ID.supabase.co/auth/v1/callback`.
-5. Copy the client ID and client secret into Supabase → Authentication → Sign In / Providers → Google, and enable/save it.
-6. If Google's app is in testing mode, add your testing email accounts as test users.
-
-The Google callback is the SUPABASE callback; `/home` is the APP destination after Supabase completes sign-in. The browser should receive only the Supabase publishable/anon key, never the Google client secret.
-
-## 7. Start and test in this order
-
-```powershell
-npm run dev
-```
-
-Open http://localhost:3000. Then:
-1. `/` should take you to `/login`.
-2. Before signing in, open `/home`, `/trips`, `/map` and `/profile`. They should take you back to `/login`.
-3. Select “I'll use email”, enter a real email, and submit. Invalid email input should be rejected by the browser.
-4. Open the magic link in the SAME browser and continue to `/home`. Check spam if the email does not arrive. Check Supabase email logs/rate limits if sending fails.
-5. Test Google in a fresh signed-out session. You should return to `/home`.
-6. Click Home, Trip, Map and Profile. Each should show the shared navigation and correct active tab.
-7. Profile should show your email/name. Click Sign out; it should return to Login. Opening protected pages again should redirect.
-8. Refresh Home while signed in. Session should persist.
-9. In Supabase, confirm the new user has a profiles row.
-10. Test a second account: it must not be able to read a trip until its owner adds it to trip_members. It must not be able to self-join or change ownership. The UI for creating trips/invitations is still pending, so run these checks with authenticated Supabase client requests or a role-aware test harness, not SQL Editor's privileged admin connection.
-
-Client-side redirects do not turn static placeholder pages into private server-rendered pages. Keep sensitive content behind authenticated Supabase queries/RLS, and add server authorization if server endpoints are introduced.
-
-When done, stop the dev server with Ctrl+C and verify production:
+## 4. Check and launch
 
 ```powershell
 npm run typecheck
-npm run build
-npm run start
+npm test
+npx expo install --check
+npm start -- --go
 ```
 
-## 8. What has been fixed
+Scan the QR code. Android: scan in Expo Go. iPhone: scan with Camera and open in
+Expo Go. Phone and laptop need the same reachable network. When Windows asks,
+allow Node on your trusted private network, not every public network.
 
-| Finding in upload | Correction |
-|---|---|
-| Login under src/features/auth/login/page.tsx is not a route | Moved to src/app/(auth)/login/page.tsx |
-| tabs folder adds /tabs to URLs, breaking nav | Renamed to (tabs), so /home and /map resolve |
-| Trips does not receive tab layout | Moved /trips into (tabs) |
-| Profile link has no page | Added profile identity and sign-out handling |
-| Tab pages have no login guard | Added session loading and unauthenticated redirect |
-| Placeholder Supabase credentials crash/lead to unclear failures | Added explicit setup state and disabled sign-in until configured |
-| Auth initialization/network rejection unhandled | Added error handling and session-listener cleanup |
-| Login requests can leave loading state stuck on failure | Added catch/finally handling |
-| Email input has no submit validation/label | Added labelled form with native email validation |
-| UI promises phone login but only supports email | Changed label to email |
-| Existing Login button only refreshes current page | Opens the email form |
-| BottomSheet lacks focus containment/restoration | Uses native modal dialog with Escape/backdrop close |
-| Security audit reports high/critical issues | Updated Next/React and matching type dependencies |
-| No database setup in repository | Added transactional migration and RLS verification query |
-| No reproducible setup instructions | Added this guide and .env.example |
+After editing .env:
 
-## 9. What is still left out
+```powershell
+npm start -- --go --clear
+```
 
-### Module A: finish after setup
-- Real Supabase credentials and applying the migration to YOUR project.
-- Actual Google OAuth/email authentication and two-account permission testing.
-- Exact Figma visual match: original logo asset, decorative waves, font and mobile spacing. The screenshot is a visual reference; the implementation still uses a text logo placeholder. Apple/Facebook/phone sign-in are not implemented.
-- Home active/upcoming trip cards and real data queries.
-- Profile preference and emergency-contact editing/saving UI; database fields exist, but the current page displays account identity only.
-- A public member-name/avatar directory that does not reveal private profile fields.
-- ESLint configuration if the team requires a separate lint check.
+If LAN access fails, stop the server with Ctrl+C, then try:
 
-### Module B
-Trip creation wizard, invitations/acceptance, preferences, activity candidates, votes, results, editable AI draft, itinerary persistence. Add schema/policies for candidates/votes/invitations; these are not in the foundation migration.
+```powershell
+npm start -- --go --tunnel
+```
 
-### Module C
-Mapbox map/pins/route polylines and token setup, place data/vibe layers, location Ask AI, secure Gemini integration, weather integration, manual flight-delay demonstration and rescheduling. Automatic background flight monitoring and notification center remain stretch features. No service-role/Gemini/flight secrets belong in NEXT_PUBLIC variables.
+Expo may ask to install tunnel support. VPNs and campus networks can block local
+device access. The previous Next.js allowedDevOrigins setting is no longer used.
 
-### Module D
-Expense forms/ledger, equal/custom splits, balances, payer/participant validation, currency handling, receipt metadata/storage policies, logistics/pricing mock data. The basic expenses table is not a complete split ledger. Decide whether members can write their own expenses and add author-based policies before enabling that.
+### PostCSS autoprefixer error
 
-### Integration
-Realtime subscriptions/publication setup, loading/empty/error states, storage policies if uploads are added, demo data, end-to-end tests and deployment configuration. Supabase Realtime is not automatically configured by the migration.
+If Metro says `Loading PostCSS "autoprefixer" plugin failed`, Expo found an old
+Next.js `postcss.config.mjs`. In PowerShell, from the Expo project folder:
 
-## 10. Architecture decisions to align with the team
+```powershell
+Get-Location
+Get-ChildItem -Force postcss.config.*
+```
 
-README/spec describe React Native + Expo/NativeWind, while the uploaded code and architecture file use Next.js web/Tailwind. This repair preserves the actual web application; it does not create an Expo app. Decide which is the final deliverable and update the documentation consistently.
+If `postcss.config.mjs` appears, rename it so Metro no longer loads it:
 
-The architecture file also lists older purple tokens (#7047EB etc.), while the uploaded theme uses #7E49C2 and related colours from the latest guidance. Keep one agreed theme contract. No Figma source was fetched during this repair, so exact Figma equivalence has not been verified.
+```powershell
+Rename-Item postcss.config.mjs postcss.config.mjs.disabled
+npx expo start --clear
+```
 
-requirements.txt contains Python dependencies, but this upload has no Python service. It is retained for your team to decide; you do not need pip install to run this Next.js foundation. AI/backend choices should be aligned before adding another service.
+The migrated Expo project uses `metro.config.js` and NativeWind. It does not
+need Next.js's PostCSS/autoprefixer config. If there is no PostCSS config, check
+that `Get-Location` is the extracted Expo project root containing the delivered
+package.json and metro.config.js, then run `npm ci` and `npx expo start --clear`.
+The Expo archive has no `postcss.config.mjs`; this error usually means it was
+extracted over the old Next.js folder and an obsolete file remained.
 
-## 11. Verified and unverified
+Expo may update the `include` field in tsconfig.json when Router runs. That
+message is normal. Keep Expo's updated tsconfig.json.
 
-Verified here: compatible dependency tree, TypeScript check, production Webpack build, zero npm audit advisories at check time; foundation SQL creation and triggers; owner/member/outsider/anonymous access checks in an isolated PostgreSQL-compatible PGlite runtime.
+If web reports `Cannot manually set color scheme, as dark mode is type 'media'`,
+confirm `tailwind.config.js` contains `darkMode: "class"`. Then restart Metro:
 
-Not verified here: real Google/email sign-in, live Supabase database deployment, real email delivery, live Realtime subscriptions, exact design fidelity, or the future Modules B–D. The browser download failed, so interactive browser checks (redirect execution, login form clicks and modal focus) were not completed here. HTTP smoke checks confirmed the route responses and root redirect. Local database tests emulate auth.users/auth.uid; your actual hosted Supabase instance still needs the checks in step 7.
+```powershell
+npx expo start --web --clear
+```
 
-Official references:
-- https://vercel.com/changelog/next-js-may-2026-security-release
-- https://supabase.com/docs/guides/auth/redirect-urls
-- https://supabase.com/docs/guides/auth/social-login/auth-google
-- https://supabase.com/docs/guides/database/postgres/row-level-security
+Browser preview:
+
+```powershell
+npm run web
+```
+
+Browser preview is still Expo/React Native Web, not Next.js. Test Android/iOS
+before calling the mobile release complete.
+
+## 5. Verify your screens
+
+1. Log in with an existing account.
+2. Open Profile and check that saved account information still appears.
+3. Create a preference profile, edit it, relaunch, then delete a test profile.
+4. Update contact, notes and settings; reopen to verify saving.
+5. Create a trip; check Trips and the appropriate Home date filter.
+6. Background/reopen the app, then close/relaunch to check the session.
+7. Log out and press Back; private pages should be inaccessible.
+8. Test with a second account to confirm private information is protected.
+
+Map and Ask AI intentionally explain that they are not connected. Voting,
+budgeting and push delivery were not present in the source upload and remain
+team work. See architecture.md for exact ownership.
+
+## 6. Installable Android app / development build
+
+This step is optional for foundation testing. It requires your own Expo account
+and may consume your account's build quota. No cloud build has been started for
+you. Mapbox later requires a development build rather than Expo Go.
+
+```powershell
+npx eas-cli@latest login
+npx eas-cli@latest build:configure
+npx eas-cli@latest build --platform android --profile preview
+```
+
+During configuration, choose your team's unique Android package identifier, for
+example com.yourteam.eggsplore, and confirm project ownership. Enter the public
+Supabase environment values in the corresponding EAS environment before building;
+local ignored .env files are not a reliable way to configure cloud builds.
+The preview profile makes an APK; download/install it after the build completes.
+
+For a custom development client:
+
+```powershell
+npx eas-cli@latest build --platform android --profile development
+npm start -- --dev-client
+```
+
+iOS device distribution involves Apple signing, and EAS will guide the team
+through the needed account/provisioning setup. A native local iOS build requires
+macOS/Xcode. Local Android builds require Android Studio/SDK tools. These are not
+required simply to test the current foundation in a compatible Expo Go app.
+
+## 7. Push to GitHub
+
+Create an EMPTY repository on GitHub first, without a generated README. In the
+new migrated project folder:
+
+```powershell
+git init
+git branch -M main
+git status --short
+git add .
+git diff --cached --stat
+git diff --cached
+```
+
+Review the staged diff. It must not contain .env, passwords, secret keys,
+node_modules, build output or signing files. Then:
+
+```powershell
+git commit -m "Migrate Eggsplore foundation to React Native and Expo"
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+git push -u origin main
+```
+
+Replace YOUR_USERNAME/YOUR_REPOSITORY with your actual GitHub repository. GitHub
+will request authentication; use its browser sign-in flow. Never paste a token
+into tracked source files.
+
+If the repository already has history, do not force push. Clone it, create a
+migration branch, and bring the migrated files in while explicitly removing
+obsolete Next.js files listed in MIGRATION.md. Preserve unrelated team changes.
+Review the diff and open a pull request for the team.
+
+Teammates then run:
+
+```powershell
+git clone https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+cd YOUR_REPOSITORY
+npm ci
+Copy-Item .env.example .env
+# Fill in the public Supabase values.
+npm start -- --go
+```
+
+## Troubleshooting
+
+| Symptom                                  | Check                                                                              |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| Supabase configuration message           | .env names, values, project URL; restart with --clear                              |
+| Invalid credentials                      | Same Supabase project, correct email/password, email confirmation                  |
+| Profile loading fails                    | Signup profile trigger, profiles row, SELECT RLS; do not insert arbitrary profiles |
+| Trip creation fails                      | profiles row, trip INSERT RLS, owner-membership trigger                            |
+| Profile changed on another device        | Retry; guarded update prevented a lost edit                                        |
+| Module not found                         | Correct project folder, npm ci completed, matching package-lock                    |
+| Expo Go SDK mismatch                     | Use compatible Expo Go or build a development client                               |
+| Missing public environment values in APK | Configure the EAS environment and rebuild                                          |
+| No notification arrives                  | Delivery is not implemented; toggle only saves a preference                        |
