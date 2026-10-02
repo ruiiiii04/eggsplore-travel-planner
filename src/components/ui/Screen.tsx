@@ -68,7 +68,7 @@ export function Loading() {
     <View className="flex-1 items-center justify-center bg-canvas p-8">
       <ActivityIndicator
         size="large"
-        color="#7E49C2"
+        color="#7C4DBE"
         accessibilityLabel="Loading"
       />
     </View>

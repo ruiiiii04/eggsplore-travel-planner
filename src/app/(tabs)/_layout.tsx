@@ -1,13 +1,36 @@
 import { Tabs } from "expo-router";
-import { Home, Compass, MapPin, UserRound } from "lucide-react-native";
+import {
+  Home,
+  BriefcaseBusiness,
+  MapPin,
+  UserRound,
+} from "lucide-react-native";
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#7E49C2",
-        tabBarInactiveTintColor: "#817493",
-        tabBarStyle: { backgroundColor: "#FFFFFF" },
+        tabBarActiveTintColor: "#7C4DBE",
+        tabBarInactiveTintColor: "#222222",
+        tabBarStyle: {
+          height: 90,
+          paddingTop: 12,
+          paddingBottom: 8,
+          width: "100%",
+          maxWidth: 402,
+          alignSelf: "center",
+          backgroundColor: "#FFFFFF",
+          borderTopColor: "#EEE7F5",
+          borderTopWidth: 1,
+          elevation: 8,
+        },
+        tabBarLabelStyle: {
+          fontFamily: "Inter",
+          fontSize: 11,
+          fontWeight: "600",
+          marginTop: 5,
+        },
+        tabBarIconStyle: { marginTop: 0 },
         tabBarHideOnKeyboard: true,
       }}
     >
@@ -21,9 +44,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="trips"
         options={{
-          title: "Trips",
+          title: "Trip",
           tabBarIcon: ({ color, size }) => (
-            <Compass color={color} size={size} />
+            <BriefcaseBusiness color={color} size={size} />
           ),
         }}
       />

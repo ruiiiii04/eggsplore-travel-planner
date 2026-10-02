@@ -6,10 +6,10 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        brand: "#7E49C2",
+        brand: "#7C4DBE",
         ink: "#3D174F",
         muted: "#817493",
-        canvas: "#FBF9FF",
+        canvas: "#FBF9FC",
         lavender: "#F4EEFC",
         line: "#D8C1F0",
         danger: "#B42318",

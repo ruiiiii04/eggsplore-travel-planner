@@ -41,7 +41,7 @@ export function Button({
       disabled={disabled || busy}
       className={`min-h-12 rounded-lg px-4 py-3 flex-row items-center justify-center gap-2 ${background} ${disabled || busy ? "opacity-50" : "active:opacity-75"} ${className}`}
     >
-      {busy && <ActivityIndicator color={solid ? "white" : "#7E49C2"} />}
+      {busy && <ActivityIndicator color={solid ? "white" : "#7C4DBE"} />}
       {typeof children === "string" ? (
         <Text
           className={`text-base font-semibold text-center ${solid ? "text-white" : "text-brand"}`}

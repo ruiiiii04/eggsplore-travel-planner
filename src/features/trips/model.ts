@@ -2,6 +2,8 @@ export type Trip = {
   id: string;
   title: string;
   destination: string | null;
+  /** Optional future destination-specific cover URL. The current table may omit it. */
+  cover_url?: string | null;
   owner_id: string;
   start_date: string | null;
   end_date: string | null;
