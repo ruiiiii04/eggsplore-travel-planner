@@ -1,39 +1,84 @@
-'use client';
-import * as React from 'react';
-import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
-export interface BottomSheetProps {
-  isOpen: boolean;
+import {
+  Modal,
+  Pressable,
+  View,
+  Text,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { X } from "lucide-react-native";
+import type { ReactNode } from "react";
+import { Button } from "./Button";
+export function BottomSheet({
+  visible,
+  title,
+  onClose,
+  busy,
+  children,
+}: {
+  visible: boolean;
+  title: string;
   onClose: () => void;
-  title?: string;
-  children: React.ReactNode;
-  className?: string;
-}
-// Native modal dialog supplies focus trapping, background inertness and focus
-// restoration. Keep it mounted so focus is restored on close.
-export function BottomSheet({ isOpen, onClose, title, children, className }: BottomSheetProps) {
-  const ref = React.useRef<HTMLDialogElement>(null);
-  const titleId = React.useId();
-  React.useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (!isOpen) { if (dialog.open) dialog.close(); return; }
-    if (!dialog.open) dialog.showModal();
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = overflow; if (dialog.open) dialog.close(); };
-  }, [isOpen]);
-  return <dialog ref={ref} aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : 'Bottom sheet'}
-    onCancel={(event) => { event.preventDefault(); onClose(); }}
-    onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
-    className="m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-black/40">
-    <div className={cn('absolute bottom-0 left-1/2 w-full max-w-[390px] -translate-x-1/2 rounded-t-2xl border-t border-surface-border bg-surface-card px-5 pb-8 pt-3 shadow-sheet', className)}>
-      <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-surface-muted" />
-      <div className="mb-4 flex items-center justify-between gap-4">
-        {title && <h2 id={titleId} className="text-lg font-bold">{title}</h2>}
-        <button type="button" autoFocus onClick={onClose} className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-text-secondary hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-primary-400" aria-label="Close"><X className="h-5 w-5" /></button>
-      </div>
-      <div className="max-h-[75dvh] overflow-y-auto">{children}</div>
-    </div>
-  </dialog>;
+  busy?: boolean;
+  children: ReactNode;
+}) {
+  const dismiss = () => {
+    if (!busy) onClose();
+  };
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={dismiss}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1, justifyContent: "flex-end" }}
+      >
+        <Pressable
+          accessibilityLabel="Close dialog"
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={dismiss}
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(25, 12, 35, 0.4)",
+          }}
+        />
+        <SafeAreaView
+          edges={["bottom", "left", "right"]}
+          accessibilityViewIsModal
+          className="w-full max-w-2xl self-center rounded-t-2xl bg-canvas"
+          style={{ maxHeight: "90%" }}
+        >
+          <View className="flex-row items-center px-5 pt-3 gap-3">
+            <Text
+              accessibilityRole="header"
+              className="flex-1 text-xl font-bold text-ink"
+            >
+              {title}
+            </Text>
+            <Button
+              variant="ghost"
+              accessibilityLabel="Close dialog"
+              disabled={busy}
+              onPress={dismiss}
+            >
+              <X color="#7E49C2" size={22} />
+            </Button>
+          </View>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ padding: 20, gap: 16 }}
+          >
+            {children}
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
 }

@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Eggsplore",
+    "slug": "eggsplore",
+    "version": "1.0.0",
+    "scheme": "eggsplore",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router", "expo-status-bar"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}
