@@ -1,0 +1,36 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/(tabs)/layout,_N_T_/(tabs)/profile/layout,_N_T_/(tabs)/profile/new/layout,_N_T_/(tabs)/profile/new/page,_N_T_/profile/new"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/!KHRhYnMp/profile/new/__PAGE__"
+  ],
+  "prefetchHints": {
+    "hints": 64,
+    "slots": {
+      "children": {
+        "hints": 96,
+        "slots": {
+          "children": {
+            "hints": 96,
+            "slots": {
+              "children": {
+                "hints": 96,
+                "slots": {
+                  "children": {
+                    "hints": 160,
+                    "slots": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

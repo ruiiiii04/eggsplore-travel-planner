@@ -1,43 +1,90 @@
-'use client';
-import { createContext, useEffect, useState, type ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { getSupabase, supabase, supabaseConfigurationError } from '@/lib/supabase';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { AppState } from "react-native";
+import type { Session } from "@supabase/supabase-js";
+import {
+  getSupabase,
+  supabase,
+  supabaseConfigurationError,
+} from "@/lib/supabase";
+import { errorMessage } from "@/lib/errors";
 
-interface AuthContextValue {
-  user: User | null;
+type Auth = {
   session: Session | null;
   loading: boolean;
   error: string | null;
   signOut: () => Promise<void>;
-}
-export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+};
+const AuthContext = createContext<Auth | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(supabaseConfigurationError);
   useEffect(() => {
     const client = supabase;
-    if (!client) { setLoading(false); return; }
-    let mounted = true;
+    if (!client) {
+      setLoading(false);
+      return;
+    }
+    let active = true;
     let changed = false;
-    const { data: { subscription } } = client.auth.onAuthStateChange((_event, newSession) => {
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((_event, next) => {
       changed = true;
-      if (mounted) { setSession(newSession); setLoading(false); setError(null); }
-    });
-    void client.auth.getSession().then(({ data, error: authError }) => {
-      if (mounted && !changed) {
-        setSession(data.session);
-        setError(authError?.message ?? null);
+      if (active) {
+        setSession(next);
+        setLoading(false);
+        setError(null);
       }
-    }).catch((cause: unknown) => {
-      if (mounted) setError(cause instanceof Error ? cause.message : 'Unable to load your session.');
-    }).finally(() => { if (mounted) setLoading(false); });
-    return () => { mounted = false; subscription.unsubscribe(); };
+    });
+    void client.auth
+      .getSession()
+      .then(({ data, error: failure }) => {
+        if (active && !changed) {
+          setSession(data.session);
+          setError(failure?.message ?? null);
+        }
+      })
+      .catch((cause) => {
+        if (active) setError(errorMessage(cause));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    const refresh = (state: string) => {
+      if (state === "active") client.auth.startAutoRefresh();
+      else client.auth.stopAutoRefresh();
+    };
+    refresh(AppState.currentState);
+    const listener = AppState.addEventListener("change", refresh);
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+      listener.remove();
+      client.auth.stopAutoRefresh();
+    };
   }, []);
-  const signOut = async () => {
-    const { error: authError } = await getSupabase().auth.signOut();
-    if (authError) throw authError;
+  async function signOut() {
+    const { error: failure } = await getSupabase().auth.signOut({
+      scope: "local",
+    });
+    if (failure) throw failure;
     setSession(null);
-  };
-  return <AuthContext.Provider value={{ user: session?.user ?? null, session, loading, error, signOut }}>{children}</AuthContext.Provider>;
+  }
+  return (
+    <AuthContext.Provider value={{ session, loading, error, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+export function useAuth() {
+  const value = useContext(AuthContext);
+  if (!value) throw new Error("useAuth requires AuthProvider.");
+  return { ...value, user: value.session?.user ?? null };
 }
