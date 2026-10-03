@@ -44,6 +44,7 @@ export function Button({
       {busy && <ActivityIndicator color={solid ? "white" : "#7C4DBE"} />}
       {typeof children === "string" ? (
         <Text
+          style={{ fontFamily: "Inter" }}
           className={`text-base font-semibold text-center ${solid ? "text-white" : "text-brand"}`}
         >
           {children}

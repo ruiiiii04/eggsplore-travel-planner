@@ -69,7 +69,8 @@ queries. No new database migration is required by this Expo conversion.
 | Preference profiles: create, edit, delete, categories, pace, companions, spending order, interests | Migrated; existing JSON format preserved             |
 | Trip creation, trip list, date filters, basic trip detail                                          | Implemented to replace the old dead Create Trip link |
 | AI itinerary generation from trip dates, budget, type, and preferences                             | Implemented; requires a Gemini API key in Supabase  |
-| Candidate pool and collaborative voting                                                            | Planned: Module B                                    |
+| Candidate pool, candidate submission, draft review, and itinerary publishing                       | Implemented; pools and votes are private per user     |
+| Collaborative voting across trip members                                                          | Planned: shared candidate/vote schema and Realtime   |
 | Native Mapbox, Ask AI, weather/flight disruptions                                                  | Planned: Module C; map currently shows a placeholder |
 | Budget, split logic, price estimates, notification delivery                                        | Planned: Module D                                    |
 

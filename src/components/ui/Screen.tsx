@@ -33,14 +33,22 @@ export function Screen({ children, ...props }: ScrollViewProps) {
 }
 export function Heading({ children }: { children: ReactNode }) {
   return (
-    <Text accessibilityRole="header" className="text-2xl font-bold text-ink">
+    <Text
+      accessibilityRole="header"
+      style={{ fontFamily: "Fredoka" }}
+      className="text-2xl font-bold text-ink"
+    >
       {children}
     </Text>
   );
 }
 export function SectionTitle({ children }: { children: ReactNode }) {
   return (
-    <Text accessibilityRole="header" className="text-lg font-bold text-ink">
+    <Text
+      accessibilityRole="header"
+      style={{ fontFamily: "Inter" }}
+      className="text-lg font-bold text-ink"
+    >
       {children}
     </Text>
   );
@@ -56,6 +64,7 @@ export function Message({
   return (
     <Text
       accessibilityRole={error ? "alert" : undefined}
+      style={{ fontFamily: "Inter" }}
       accessibilityLiveRegion="polite"
       className={`text-sm leading-6 ${error ? "text-danger" : "text-muted"}`}
     >

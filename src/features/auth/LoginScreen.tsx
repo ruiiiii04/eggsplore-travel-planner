@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Image, View, Text } from "react-native";
-import { Eye, EyeOff } from "lucide-react-native";
+
 import { Screen, Heading, Field, Button, Message } from "@/components/ui";
 import { getSupabase, supabaseConfigurationError } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
@@ -10,7 +10,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [show, setShow] = useState(false);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -59,16 +59,23 @@ export default function LoginScreen() {
         source={require("../../../assets/eggsplore-logo.png")}
         accessibilityLabel="Eggsplore"
         resizeMode="contain"
-        style={{ width: 146, height: 146, alignSelf: "center", marginTop: 24 }}
+        style={{
+          width: 176,
+          height: 176,
+          alignSelf: "center",
+          marginTop: 48,
+          marginBottom: 32,
+        }}
       />
       <View className="items-center gap-3">
-        <Heading>
-          {signup ? "Start your next adventure" : "Let's plan your next trip"}
-        </Heading>
-        <Text className="text-muted">
+        <Heading>Let's plan your next trip</Heading>
+        <Text
+          style={{ fontFamily: "Inter" }}
+          className="text-muted text-center"
+        >
           {signup
-            ? "Create your Eggsplore account"
-            : "Log in with your email and password"}
+            ? "Sign up to start planning with Eggsplore"
+            : "Log in to start planning with Eggsplore"}
         </Text>
       </View>
       <Field
@@ -87,7 +94,7 @@ export default function LoginScreen() {
           label="Password"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry={!show}
+          secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
           autoComplete={signup ? "new-password" : "current-password"}
@@ -96,25 +103,13 @@ export default function LoginScreen() {
             if (!signup) void submit();
           }}
         />
-        <Button
-          className="self-end"
-          variant="ghost"
-          onPress={() => setShow(!show)}
-          accessibilityLabel={show ? "Hide password" : "Show password"}
-        >
-          {show ? (
-            <EyeOff color="#7E49C2" size={20} />
-          ) : (
-            <Eye color="#7E49C2" size={20} />
-          )}
-        </Button>
       </View>
       {signup && (
         <Field
           label="Confirm password"
           value={confirm}
           onChangeText={setConfirm}
-          secureTextEntry={!show}
+          secureTextEntry
           autoCapitalize="none"
           autoComplete="new-password"
           editable={!busy}
@@ -123,11 +118,12 @@ export default function LoginScreen() {
       <Message error>{error || auth.error}</Message>
       <Message>{notice}</Message>
       <Button
+        className="rounded-full"
         busy={busy}
         disabled={!!supabaseConfigurationError}
         onPress={() => void submit()}
       >
-        {signup ? "Create account" : "Log in"}
+        {signup ? "Create Account" : "Login"}
       </Button>
       <Button
         variant="ghost"
@@ -141,7 +137,7 @@ export default function LoginScreen() {
         }}
       >
         {signup
-          ? "Already have an account? Log in"
+          ? "Already have account? Login"
           : "New to Eggsplore? Create account"}
       </Button>
     </Screen>

@@ -52,7 +52,7 @@ export default function PreferenceScreen() {
         setOriginal(item);
         setName(item.name);
         setCategory(item.category ?? "beach");
-        setPace(item.pace ?? "Moderate");
+        setPace(item.pace === "Packed" ? "Intense" : (item.pace ?? "Moderate"));
         setCompanion(item.companion ?? "solo");
         setOrder(
           item.spendingOrder ?? ["Stay", "Food", "Activities", "Transport"],
@@ -140,9 +140,7 @@ export default function PreferenceScreen() {
           <ArrowLeft size={22} color="#7E49C2" />
         </Button>
         <View className="flex-1">
-          <Heading>
-            {id ? "Edit Preference Profile" : "Create New Profile"}
-          </Heading>
+          <Heading>{id ? "Edit Profile" : "New Profile"}</Heading>
         </View>
       </View>
       <Message error>{error}</Message>
@@ -150,14 +148,16 @@ export default function PreferenceScreen() {
       {!!id && !loading && !original && (
         <Button onPress={() => setRetry((value) => value + 1)}>Retry</Button>
       )}
+      <SectionTitle>Basic Info</SectionTitle>
       <Field
-        label="Profile name"
+        label="Profile Name *"
         value={name}
         onChangeText={setName}
         editable={!disabled}
-        placeholder="My next adventure"
+        placeholder="e.g. Beach Lover"
       />
-      <SectionTitle>Travel style</SectionTitle>
+      <SectionTitle>Icon</SectionTitle>
+      <Message>Tap to select a category</Message>
       <View className="flex-row flex-wrap gap-2">
         {categories.map((item) => (
           <Button
@@ -169,9 +169,9 @@ export default function PreferenceScreen() {
           >{`${item.emoji} ${item.name}`}</Button>
         ))}
       </View>
-      <SectionTitle>Travel pace</SectionTitle>
+      <SectionTitle>Travel Pace</SectionTitle>
       <View className="flex-row flex-wrap gap-2">
-        {["Relaxed", "Moderate", "Packed"].map((value) => (
+        {["Relaxed", "Moderate", "Intense"].map((value) => (
           <Button
             key={value}
             disabled={disabled}
@@ -182,7 +182,8 @@ export default function PreferenceScreen() {
           </Button>
         ))}
       </View>
-      <SectionTitle>Travel companions</SectionTitle>
+      <SectionTitle>Companion Type</SectionTitle>
+      <Message>Who are you travelling with?</Message>
       <View className="flex-row flex-wrap gap-2">
         {companions.map((item) => (
           <Button
@@ -195,14 +196,18 @@ export default function PreferenceScreen() {
           </Button>
         ))}
       </View>
-      <SectionTitle>Spending priorities</SectionTitle>
+      <SectionTitle>Spending Priority</SectionTitle>
+      <Message>Use the arrows to rank where you want to splurge most</Message>
       <View>
         {order.map((item, index) => (
           <View
             key={item}
             className="flex-row items-center border-b border-line py-1 gap-2"
           >
-            <Text className="text-base text-ink flex-1">
+            <Text
+              style={{ fontFamily: "Inter" }}
+              className="text-base text-ink flex-1"
+            >
               {index + 1}. {item}
             </Text>
             <Button
@@ -227,7 +232,10 @@ export default function PreferenceScreen() {
       <SectionTitle>Interests</SectionTitle>
       {interestGroups.map((group) => (
         <View key={group.title} className="gap-3">
-          <Text className="text-base font-semibold text-ink">
+          <Text
+            style={{ fontFamily: "Inter" }}
+            className="text-base font-semibold text-ink"
+          >
             {group.title}
           </Text>
           <View className="flex-row flex-wrap gap-2">
@@ -255,7 +263,7 @@ export default function PreferenceScreen() {
         busy={busy}
         onPress={() => void save()}
       >
-        Save profile
+        {id ? "Save Profile" : "Create Profile"}
       </Button>
       {!!id && (
         <Button
