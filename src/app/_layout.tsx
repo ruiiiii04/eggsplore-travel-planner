@@ -17,7 +17,6 @@ function Routes() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="profile/new" />
         <Stack.Screen name="trips/create" />
-        <Stack.Screen name="trips/[id]" />
       </Stack.Protected>
       <Stack.Screen name="index" />
       <Stack.Screen name="+not-found" />

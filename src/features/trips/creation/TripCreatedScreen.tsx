@@ -64,8 +64,6 @@ const styles = StyleSheet.create({
   memberLine: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 },
   avatarStack: { flexDirection: "row", alignItems: "center", paddingLeft: 1 },
   avatar: { width: 19, height: 19, borderRadius: 10, borderWidth: 1.5, borderColor: "white", alignItems: "center", justifyContent: "center" },
-  avatarStack: { flexDirection: "row", alignItems: "center", paddingLeft: 1 },
-  avatar: { width: 19, height: 19, borderRadius: 10, borderWidth: 1.5, borderColor: "white", alignItems: "center", justifyContent: "center" },
   memberCount: { color: "#88799A", fontFamily: "Inter", fontSize: 10 },
   actions: { width: "100%", marginTop: "auto", gap: 10 },
   homeButton: { minHeight: 53, borderRadius: 28, borderWidth: 1, borderColor: "#DED0ED", alignItems: "center", justifyContent: "center", backgroundColor: "#FBF9FC" },

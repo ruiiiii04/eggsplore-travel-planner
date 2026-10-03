@@ -9,20 +9,26 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { router } from "expo-router";
+import { rememberTrip } from "@/features/trips/recentTrip";
 import {
   Bell,
   CalendarDays,
   MapPin,
   Plus,
-  Sparkles,
-  Star,
+  ReceiptText,
+  ShieldAlert,
+  ThumbsUp,
+  UserRoundPlus,
   UsersRound,
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BottomSheet, Message } from "@/components/ui";
+import { BottomSheet, Button, Field, Message } from "@/components/ui";
 import { useTrips } from "@/features/trips/useTrips";
 import { tripStatus, type TripStatus } from "@/features/trips/model";
 import type { Trip } from "@/features/trips/model";
+import { useAuth } from "@/features/auth/useAuth";
+import { useProfile } from "@/features/profile/useProfile";
+import { getSupabase } from "@/lib/supabase";
 
 const purple = "#7C4DBE";
 const ink = "#3B1454";
@@ -72,9 +78,10 @@ function DestinationCard({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Open ${trip.title}`}
-      onPress={() =>
-        router.push({ pathname: "/trips/[id]", params: { id: trip.id } })
-      }
+      onPress={() => {
+        void rememberTrip(trip.id);
+        router.push({ pathname: "/trips/[id]/itinerary", params: { id: trip.id } });
+      }}
       style={[styles.tripCard, spacingAfter && styles.tripCardSpacing]}
     >
       <View style={[styles.tripPhoto, !cover && styles.tripPhotoFallback]}>
@@ -164,34 +171,65 @@ function formatTripDates(start: string, end: string | null): string {
   return `${format(start)} - ${format(end)}`;
 }
 
-function QuickAccess({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={styles.quickItem}
-    >
-      {icon}
-      <Text style={styles.quickLabel}>{label.replace(/\\n/g, "\n")}</Text>
-    </Pressable>
-  );
-}
-
 export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const heroScale = Math.min(windowWidth, 402) / 402;
-  const [filter, setFilter] = useState<TripStatus>("Live");
-  const [sheet, setSheet] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TripStatus | "All">("All");
+  const [sheet, setSheet] = useState<"notifications" | "expense" | "emergency" | "invite" | "message" | null>(null);
+  const [quickMessage, setQuickMessage] = useState("");
+  const [expenseTitle, setExpenseTitle] = useState("");
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseCategory, setExpenseCategory] = useState("");
+  const [expenseBusy, setExpenseBusy] = useState(false);
+  const [expenseError, setExpenseError] = useState("");
   const { trips, loading, error, refresh } = useTrips();
-  const visible = trips.filter((trip) => tripStatus(trip) === filter);
+  const { user } = useAuth();
+  const { profile } = useProfile();
+  const visible = trips.filter((trip) => filter === "All" || tripStatus(trip) === filter);
+  const currentTrip = trips.find((trip) => tripStatus(trip) === "Live") ?? trips.find((trip) => tripStatus(trip) === "Upcoming");
+  const liveTrip = trips.find((trip) => tripStatus(trip) === "Live");
+
+  function openExpense() {
+    if (!liveTrip) {
+      setQuickMessage("Add Expense is available while you have a live trip.");
+      setSheet("message");
+      return;
+    }
+    if (!user || liveTrip.owner_id !== user.id) {
+      setQuickMessage("Only the trip owner can add expenses right now.");
+      setSheet("message");
+      return;
+    }
+    setExpenseTitle("");
+    setExpenseAmount("");
+    setExpenseCategory("");
+    setExpenseError("");
+    setSheet("expense");
+  }
+
+  async function saveExpense() {
+    const amount = Number(expenseAmount.trim().replace(",", "."));
+    if (!liveTrip || !user) return;
+    if (!expenseTitle.trim()) { setExpenseError("Enter an expense name."); return; }
+    if (!Number.isFinite(amount) || amount <= 0) { setExpenseError("Enter an amount greater than zero."); return; }
+    setExpenseBusy(true);
+    setExpenseError("");
+    try {
+      const { error: saveError } = await getSupabase().from("expenses").insert({
+        trip_id: liveTrip.id,
+        paid_by: user.id,
+        title: expenseTitle.trim(),
+        amount,
+        category: expenseCategory.trim() || null,
+      });
+      if (saveError) throw saveError;
+      setSheet(null);
+    } catch (cause) {
+      setExpenseError(cause instanceof Error ? cause.message : "Could not save this expense.");
+    } finally {
+      setExpenseBusy(false);
+    }
+  }
 
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
@@ -209,7 +247,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.brandArea}>
             <Image
-              source={require("../../../assets/home-brand-mark.png")}
+              source={require("../../../assets/eggsplore-logo.png")}
               style={styles.brandMark}
             />
             <View>
@@ -222,7 +260,7 @@ export default function HomeScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Notifications"
-            onPress={() => setSheet("Notifications")}
+            onPress={() => setSheet("notifications")}
             style={styles.bellButton}
           >
             <Bell size={24} color={purple} />
@@ -313,8 +351,9 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.body}>
+          <Text style={styles.sectionTitle}>Your trips</Text>
           <View style={styles.filterBar}>
-            {(["Live", "Upcoming", "Past"] as const).map((value) => (
+            {(["All", "Live", "Upcoming", "Past"] as const).map((value) => (
               <Pressable
                 key={value}
                 accessibilityRole="button"
@@ -353,73 +392,61 @@ export default function HomeScreen() {
           {!loading && !error && visible.length === 0 && (
             <View style={styles.emptyTrips}>
               <Text style={styles.emptyTitle}>
-                No {filter.toLowerCase()} trips yet
+                No {filter === "All" ? "" : `${filter.toLowerCase()} `}trips yet
               </Text>
               <Text style={styles.emptyDescription}>
                 Create a trip and start planning together.
               </Text>
             </View>
           )}
-
           <Text style={styles.sectionTitle}>Quick access</Text>
           <View style={styles.quickRow}>
-            <QuickAccess
-              icon={<MapPin size={28} color={purple} strokeWidth={1.8} />}
-              label="Explore\nMap"
-              onPress={() => router.push("/map")}
-            />
-            <QuickAccess
-              icon={<CalendarDays size={28} color={purple} strokeWidth={1.8} />}
-              label="My\nItinerary"
-              onPress={() => router.push("/trips")}
-            />
-            <QuickAccess
-              icon={<Sparkles size={28} color={purple} strokeWidth={1.8} />}
-              label="Consult\nAI"
-              onPress={() => setSheet("AI Travel Assistant")}
-            />
-            <QuickAccess
-              icon={<Star size={28} color={purple} strokeWidth={1.8} />}
-              label="Trip\nPreference"
-              onPress={() => router.push("/profile")}
-            />
-          </View>
-
-          <View style={styles.newHereCard}>
-            <Image
-              source={require("../../../assets/home-new-here.png")}
-              style={styles.newHereIcon}
-            />
-            <View style={styles.newHereCopy}>
-              <Text style={styles.newHereTitle}>New here?</Text>
-              <Text style={styles.newHereDescription}>
-                Create your first trip and let Eggsplore handle the rest!
-              </Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Create your first trip"
-              onPress={() => router.push("/trips/create")}
-              style={styles.newHereButton}
-            >
-              <Plus size={20} color="white" />
-            </Pressable>
+            <QuickAccess icon={<ReceiptText size={28} color={purple} strokeWidth={1.8} />} label={["Add", "Expense"]} onPress={openExpense} />
+            <QuickAccess icon={<ThumbsUp size={28} color={purple} strokeWidth={1.8} />} label={["Pending", "Votes"]} onPress={() => {
+              if (!currentTrip) { setQuickMessage("Create a trip to start voting on places."); setSheet("message"); return; }
+              void rememberTrip(currentTrip.id);
+              router.push({ pathname: "/trips/[id]/candidates", params: { id: currentTrip.id } });
+            }} />
+            <QuickAccess icon={<ShieldAlert size={28} color={purple} strokeWidth={1.8} />} label={["Emergency", "Info"]} onPress={() => setSheet("emergency")} />
+            <QuickAccess icon={<UserRoundPlus size={28} color={purple} strokeWidth={1.8} />} label={["Invite", "Members"]} onPress={() => setSheet("invite")} />
           </View>
         </View>
       </ScrollView>
       <BottomSheet
         visible={!!sheet}
-        title={sheet ?? ""}
+        title={sheet === "expense" ? "Add Expense" : sheet === "emergency" ? "Emergency Info" : sheet === "invite" ? "Invite Members" : sheet === "message" ? "Quick access" : "Notifications"}
         onClose={() => setSheet(null)}
+        busy={expenseBusy}
       >
-        <Message>
-          {sheet === "Notifications"
-            ? "No notifications yet. Live alerts are not connected in this foundation release."
-            : "The AI assistant is planned for Module C. No AI request has been sent."}
-        </Message>
+        {sheet === "expense" ? <>
+          <Text style={{ color: muted, fontSize: 13 }}>Quickly record an expense for {liveTrip?.title ?? "your live trip"}.</Text>
+          <Field label="Expense name" value={expenseTitle} onChangeText={setExpenseTitle} placeholder="e.g. Dinner" />
+          <Field label="Amount (RM)" value={expenseAmount} onChangeText={setExpenseAmount} placeholder="0.00" keyboardType="decimal-pad" />
+          <Field label="Category (optional)" value={expenseCategory} onChangeText={setExpenseCategory} placeholder="Food, transport…" />
+          {!!expenseError && <Message error>{expenseError}</Message>}
+          <Button busy={expenseBusy} onPress={saveExpense}>Save Expense</Button>
+        </> : sheet === "emergency" ? <>
+          <Text style={{ color: muted, fontSize: 13 }}>Your personal emergency contact details saved in Profile.</Text>
+          {profile?.emergency_contact.name || profile?.emergency_contact.phone ? <View style={styles.infoCard}>
+            {!!profile.emergency_contact.name && <Text style={styles.infoTitle}>{profile.emergency_contact.name}{profile.emergency_contact.relationship ? ` · ${profile.emergency_contact.relationship}` : ""}</Text>}
+            {!!profile.emergency_contact.phone && <Text style={styles.infoText}>{profile.emergency_contact.phone}</Text>}
+            {!!profile.emergency_contact.destinationNotes && <Text style={styles.infoText}>{profile.emergency_contact.destinationNotes}</Text>}
+          </View> : <Message>No emergency contact saved yet. Add one in Profile.</Message>}
+          <Button variant="secondary" onPress={() => { setSheet(null); router.push("/(tabs)/profile"); }}>Open Profile</Button>
+        </> : sheet === "invite" ? <>
+          <Text style={{ color: muted, fontSize: 13 }}>{currentTrip ? `Current trip: ${currentTrip.title}.` : "Create a trip before inviting members."}</Text>
+          <Message>Invitations for existing trips are not connected yet. The invite flow currently supports trip setup only.</Message>
+        </> : sheet === "message" ? <Message>{quickMessage}</Message> : <Message>No notifications yet. Live alerts are not connected in this foundation release.</Message>}
       </BottomSheet>
     </SafeAreaView>
   );
+}
+
+function QuickAccess({ icon, label, onPress }: { icon: React.ReactNode; label: [string, string]; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={label.join(" ")} onPress={onPress} style={styles.quickItem}>
+    {icon}
+    <Text style={styles.quickLabel}>{label.join("\n")}</Text>
+  </Pressable>;
 }
 
 const styles = {
@@ -561,8 +588,7 @@ const styles = {
   },
   filterText: {
     color: muted,
-    fontFamily: "Inter",
-    fontSize: 16,
+    fontSize: 11,
     fontWeight: "600" as const,
   },
   filterTextSelected: { color: "white" },
@@ -692,18 +718,19 @@ const styles = {
     fontWeight: "700" as const,
   },
   quickRow: {
-    paddingHorizontal: 16,
+    marginHorizontal: 16,
     flexDirection: "row" as const,
     justifyContent: "space-between" as const,
     gap: 10,
   },
   quickItem: {
     flex: 1,
-    height: 98,
-    paddingHorizontal: 4,
+    minHeight: 98,
+    paddingHorizontal: 8,
     paddingVertical: 16,
     alignItems: "center" as const,
-    justifyContent: "space-between" as const,
+    justifyContent: "center" as const,
+    gap: 9,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: border,
@@ -718,43 +745,11 @@ const styles = {
     color: ink,
     fontFamily: "Inter",
     fontSize: 11,
-    lineHeight: 13,
+    lineHeight: 13.2,
     textAlign: "center" as const,
     fontWeight: "500" as const,
   },
-  newHereCard: {
-    minHeight: 83,
-    marginHorizontal: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderStyle: "dashed" as const,
-    borderColor: "#A978D6",
-    borderRadius: 20,
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 12,
-  },
-  newHereIcon: { width: 44, height: 44, borderRadius: 22 },
-  newHereCopy: { flex: 1, gap: 2 },
-  newHereTitle: {
-    color: ink,
-    fontFamily: "Inter",
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: "600" as const,
-  },
-  newHereDescription: {
-    color: muted,
-    fontFamily: "Inter",
-    fontSize: 11,
-    lineHeight: 14.3,
-  },
-  newHereButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    backgroundColor: purple,
-  },
+  infoCard: { backgroundColor: "white", borderRadius: 16, borderWidth: 1, borderColor: border, padding: 14, gap: 7 },
+  infoTitle: { color: ink, fontFamily: "Fredoka", fontSize: 16, fontWeight: "600" as const },
+  infoText: { color: muted, fontSize: 13, lineHeight: 19 },
 };
