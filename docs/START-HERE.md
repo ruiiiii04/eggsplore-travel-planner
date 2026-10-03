@@ -208,6 +208,28 @@ Copy-Item .env.example .env
 npm start -- --go
 ```
 
+## AI itinerary generation
+
+The create-trip flow calls the authenticated `generate-itinerary` Supabase Edge
+Function. Its Gemini key must stay server-side.
+
+For local development, copy `supabase/functions/env.example` to
+`supabase/functions/.env`, then replace the placeholder with a key from Google
+AI Studio. Start the local Supabase stack and serve the function with the
+Supabase CLI. The default model is `gemini-3.5-flash-lite`; you can override it
+with `GEMINI_MODEL` in the local function environment.
+
+For a deployed project, add `GEMINI_API_KEY` under Supabase Dashboard → Edge
+Functions → Secrets. Deploy `generate-itinerary` with the Supabase CLI. Never
+put the Gemini key in the Expo `.env` or app source. This free Gemini tier may
+use submitted prompts to improve Google's products, so the function sends only
+destination, dates, budget range, trip type, and preference labels; it does not
+send invitee emails or account identifiers.
+
+AI output is saved as a draft itinerary. It does not verify current opening
+hours, weather, crowd levels, routes, or prices; travellers should confirm
+place details before going.
+
 ## Troubleshooting
 
 | Symptom                                  | Check                                                                              |

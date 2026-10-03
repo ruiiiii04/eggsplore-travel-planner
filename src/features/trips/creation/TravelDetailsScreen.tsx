@@ -3,6 +3,7 @@ import { useState } from "react";
 import { CalendarDays, Lightbulb, MapPin, Search, Wallet, X } from "lucide-react-native";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { Button } from "@/components/ui";
+import { validateTrip } from "@/features/trips/model";
 import { tripColors, uiStyles, WizardFrame } from "./CreationUI";
 import { useTripCreation } from "./TripCreationContext";
 
@@ -12,15 +13,25 @@ const budgets = ["RM 1,000 – RM 2,000", "RM 2,000 – RM 5,000", "RM 5,000 –
 export default function TravelDetailsScreen() {
   const { data, update } = useTripCreation();
   const [trackWidth, setTrackWidth] = useState(300);
+  const [formError, setFormError] = useState("");
   function chooseDestination(value: string) {
     update({ destination: value, title: "" });
+    setFormError("");
   }
   function selectBudget(position: number) {
     const index = position < 0.34 ? 0 : position > 0.68 ? 2 : 1;
     update({ budget: budgets[index] });
   }
+  function continueToPreferences() {
+    if (!data.destination.trim()) { setFormError("Add a destination to continue."); return; }
+    if (!data.startDate.trim() || !data.endDate.trim()) { setFormError("Add both travel dates to generate your AI itinerary."); return; }
+    const validation = validateTrip("Trip", data.startDate.trim(), data.endDate.trim());
+    if (validation) { setFormError(validation); return; }
+    setFormError("");
+    router.push("/trips/create/preferences");
+  }
   return (
-    <WizardFrame step={2} footer={<Button className="min-h-[54px] rounded-full" onPress={() => router.push("/trips/create/preferences")}>Next</Button>}>
+    <WizardFrame step={2} footer={<Button className="min-h-[54px] rounded-full" onPress={continueToPreferences}>Next</Button>}>
       <View style={[uiStyles.card, { marginHorizontal: -10 }]}>
         <SectionHeading icon={<MapPin size={19} color={tripColors.purple} />} title="Destination" />
         <View style={styles.searchInput}>
@@ -37,9 +48,10 @@ export default function TravelDetailsScreen() {
       <View style={[uiStyles.card, { marginHorizontal: -10 }]}>
         <SectionHeading icon={<CalendarDays size={19} color={tripColors.purple} />} title="Travel Dates" />
         <View style={styles.dateRow}>
-          <DateInput label="From" value={data.startDate} onChangeText={(startDate) => update({ startDate })} />
-          <DateInput label="To" value={data.endDate} onChangeText={(endDate) => update({ endDate })} />
+          <DateInput label="From" value={data.startDate} onChangeText={(startDate) => { update({ startDate }); setFormError(""); }} />
+          <DateInput label="To" value={data.endDate} onChangeText={(endDate) => { update({ endDate }); setFormError(""); }} />
         </View>
+        {!!formError && <Text accessibilityRole="alert" style={{ color: "#B43F60", fontFamily: "Inter", fontSize: 11, marginTop: 9 }}>{formError}</Text>}
       </View>
 
       <View style={[uiStyles.card, { marginHorizontal: -10 }]}>

@@ -137,17 +137,17 @@ This allows groups to spend less time coordinating logistics and more time enjoy
 ##  2.2 Ideation Boards 
 
 ### Mindmap — Initial Brainstorming
-![Mindmap](README-images/Mindmaps.png)
+![Mindmap](../README-images/Mindmaps.png)
 Our initial mindmap split the problem into four pillars — **Plan, Coordinate, Budget, and Adapt** — with an “Extra Ideas” section for ideas that did not yet fit into a specific area. Ideas such as social media scraping and the What-If simulator were later dropped during scoping (see Section 2.1).
 
 
 ### Problem Tree — Problem Analysis
-![Problem Tree](README-images/ProblemTree.png)
+![Problem Tree](../README-images/ProblemTree.png)
 The problem tree maps the root problem — existing travel tools often solve only one part of the trip-planning process — against its upstream causes and downstream effects. This helped shape which features were prioritised for the MVP.
 
 
 ### User Flow — Solution Development
-![User Flow](README-images/UserFlow.png)
+![User Flow](../README-images/UserFlow.png)
 This early end-to-end flow maps the journey from sign-up through group voting, AI itinerary generation, and disruption handling. The overall flow remained relevant, while some steps, such as Instagram import and the calculated disruption score, were simplified during implementation.
 ## 2.3 Mentor Consultation
 ### Date: 9/9/2026
@@ -244,7 +244,7 @@ While most travel planning apps act as static digital notebooks, Eggsplore diffe
 
 
 ## 5.2 System Architecture Diagram
-![System Architecture Diagram](README-images/Eggsplore_SystemArchitectureDiagram.jpg)
+![System Architecture Diagram](../README-images/Eggsplore_SystemArchitectureDiagram.jpg)
 Our architecture follows a serverless BaaS model rather than microservices — the better fit for a small team on a hackathon timeline. The mobile app (React Native + Expo) connects directly to Supabase for auth/database/realtime, plus Mapbox and Open-Meteo, since none of these need a secret key. Gemini Flash and AviationStack do need key protection, so those calls are routed through Supabase Edge Functions, keeping the keys server-side and never bundled into the app.
 
 ---

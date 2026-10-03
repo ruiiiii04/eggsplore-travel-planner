@@ -15,6 +15,13 @@ const features = [
 export default function WelcomeScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+      <View pointerEvents="none" style={styles.wave}>
+        <Svg width="100%" height="100%" viewBox="0 0 402 126" preserveAspectRatio="none">
+          <Path d="M0 32 C74 45 115 0 207 20 C282 37 325 45 402 12 L402 126 L0 126Z" fill="#F4EAFE" />
+          <Path d="M0 73 C73 36 134 61 204 70 C273 80 315 51 402 68 L402 126 L0 126Z" fill="#EFE5FA" />
+          <Path d="M0 95 C89 75 143 99 232 89 C308 80 343 75 402 95 L402 126 L0 126Z" fill="#E9DDF7" />
+        </Svg>
+      </View>
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" style={styles.back}><ArrowLeft size={21} color={tripColors.dark} /></Pressable>
@@ -36,13 +43,6 @@ export default function WelcomeScreen() {
           ))}
         </View>
       </ScrollView>
-      <View pointerEvents="none" style={styles.wave}>
-        <Svg width="100%" height="100%" viewBox="0 0 402 126" preserveAspectRatio="none">
-          <Path d="M0 32 C74 45 115 0 207 20 C282 37 325 45 402 12 L402 126 L0 126Z" fill="#F4EAFE" />
-          <Path d="M0 73 C73 36 134 61 204 70 C273 80 315 51 402 68 L402 126 L0 126Z" fill="#EFE5FA" />
-          <Path d="M0 95 C89 75 143 99 232 89 C308 80 343 75 402 95 L402 126 L0 126Z" fill="#E9DDF7" />
-        </Svg>
-      </View>
     </SafeAreaView>
   );
 }
@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
   back: { width: 36, height: 36, justifyContent: "center" },
   hero: { height: 263, alignItems: "center", justifyContent: "center", position: "relative" },
   mascot: { width: 280, height: 197, zIndex: 1 },
-  title: { color: tripColors.dark, fontFamily: "Fredoka", fontSize: 27, lineHeight: 33, textAlign: "center", marginTop: 1 },
+  title: { color: tripColors.dark, fontFamily: "Fredoka", fontSize: 27, fontWeight: "700", lineHeight: 33, textAlign: "center", marginTop: 1 },
   subtitle: { color: tripColors.muted, fontFamily: "Inter", fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 11 },
   button: { marginTop: 27, minHeight: 54, width: "100%", borderRadius: 28, backgroundColor: "#804BC0", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, shadowColor: "#7B43C0", shadowOpacity: 0.24, shadowRadius: 11, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
   plus: { color: "white", fontFamily: "Inter", fontSize: 22, lineHeight: 25, marginTop: -2 },

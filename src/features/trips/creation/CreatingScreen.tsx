@@ -11,15 +11,19 @@ import { validateTrip } from "@/features/trips/model";
 import { tripColors } from "./CreationUI";
 import { useTripCreation } from "./TripCreationContext";
 
-const tasks = ["Finding the best destinations", "Checking weather & crowd levels", "Planning your itinerary", "Finalizing your trip"];
+const tasks = ["Drafting your day-by-day plan", "Saving your trip", "Saving itinerary activities", "Finishing your trip"];
+type GeneratedItinerary = { days: { date: string; activities: { time: string; title: string; description: string; location: string }[] }[] };
 
 export default function CreatingScreen() {
   const { user } = useAuth();
   const { data, update } = useTripCreation();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
+  const [progressStep, setProgressStep] = useState(0);
   const running = useRef(false);
   const completed = useRef(false);
+  const itineraryDraft = useRef<GeneratedItinerary | null>(null);
+  const createdTripId = useRef<string | null>(null);
 
   const saveTrip = useCallback(async () => {
     if (running.current || completed.current) return;
@@ -31,16 +35,71 @@ export default function CreatingScreen() {
       const validation = validateTrip(title, data.startDate.trim(), data.endDate.trim());
       if (validation) throw new Error(validation);
       if (!data.destination.trim()) throw new Error("Add a destination before creating your trip.");
-      const { data: created, error: failure } = await getSupabase().from("trips").insert({
-        owner_id: user.id,
-        title,
-        destination: data.destination.trim(),
-        start_date: data.startDate.trim() || null,
-        end_date: data.endDate.trim() || null,
-      }).select("id").single();
-      if (failure) throw failure;
+      if (!data.startDate.trim() || !data.endDate.trim()) throw new Error("Add your travel dates so Eggsplore can build a day-by-day itinerary.");
+      const tripDays = Math.floor((Date.parse(`${data.endDate}T00:00:00Z`) - Date.parse(`${data.startDate}T00:00:00Z`)) / 86_400_000) + 1;
+      if (tripDays > 14) throw new Error("AI itinerary generation currently supports trips up to 14 days.");
+
+      const client = getSupabase();
+      if (!itineraryDraft.current) {
+        setProgressStep(0);
+        const { data: generated, error: generationError } = await client.functions.invoke("generate-itinerary", {
+          body: {
+            destination: data.destination.trim(),
+            startDate: data.startDate.trim(),
+            endDate: data.endDate.trim(),
+            tripType: data.tripType || "solo",
+            budget: data.budget,
+            preferences: data.preference === "Custom" ? data.customPreferences : [data.preference].filter(Boolean),
+          },
+        });
+        if (generationError) {
+          let message = generationError.message;
+          if (generationError.context instanceof Response) {
+            try {
+              const details = await generationError.context.json();
+              if (typeof details?.error === "string") message = details.error;
+            } catch { /* Keep the Supabase function error. */ }
+          }
+          throw new Error(message || "Could not generate your itinerary. Please try again.");
+        }
+        if (!generated?.itinerary?.days?.length) throw new Error("The AI returned an empty itinerary. Please try again.");
+        itineraryDraft.current = generated.itinerary as GeneratedItinerary;
+      }
+
+      setProgressStep(1);
+      if (!createdTripId.current) {
+        const { data: created, error: failure } = await client.from("trips").insert({
+          owner_id: user.id,
+          title,
+          destination: data.destination.trim(),
+          start_date: data.startDate.trim(),
+          end_date: data.endDate.trim(),
+        }).select("id").single();
+        if (failure) throw failure;
+        createdTripId.current = created.id;
+      }
+
+      setProgressStep(2);
+      const tripId = createdTripId.current;
+      if (!tripId || !itineraryDraft.current) throw new Error("The generated trip data was lost. Please try again.");
+      const { error: clearFailure } = await client.from("itinerary_items").delete().eq("trip_id", tripId);
+      if (clearFailure) throw clearFailure;
+      const activities = itineraryDraft.current.days.flatMap((day) => day.activities.map((activity) => ({
+        trip_id: tripId,
+        title: activity.title.trim(),
+        description: activity.description.trim(),
+        location_name: activity.location.trim(),
+        // Preserve destination local wall-clock time as UTC fields; the UI reads
+        // the date and HH:mm directly instead of shifting it to the phone zone.
+        start_time: `${day.date}T${activity.time}:00Z`,
+        position: 0,
+      }))).map((activity, position) => ({ ...activity, position }));
+      const { error: itineraryFailure } = await client.from("itinerary_items").insert(activities);
+      if (itineraryFailure) throw itineraryFailure;
+
       completed.current = true;
-      update({ title, tripId: created.id });
+      setProgressStep(3);
+      update({ title, tripId });
       router.replace("/trips/create/created");
     } catch (cause) {
       setError(errorMessage(cause));
@@ -61,8 +120,8 @@ export default function CreatingScreen() {
         <Text style={styles.subtitle}>{error || "Our AI is crafting the perfect itinerary just for you!"}</Text>
         <View style={styles.tasks}>
           {tasks.map((task, index) => <View key={task} style={styles.task}>
-            {error ? <Circle size={18} color="#D7C9E3" /> : index === 0 && busy ? <Check size={18} color="white" fill={tripColors.purple} /> : index === 1 && busy ? <Check size={18} color="white" fill={tripColors.purple} /> : index === 2 && busy ? <ActivityIndicator size="small" color={tripColors.purple} /> : <Circle size={18} color="#D7C9E3" fill="#EEE7F6" />}
-            <Text style={[styles.taskText, index < 2 && styles.taskDone, index === 2 && busy && styles.taskActive, error && styles.taskMuted]}>{task}</Text>
+            {error ? <Circle size={18} color="#D7C9E3" /> : index < progressStep ? <Check size={18} color="white" fill={tripColors.purple} /> : index === progressStep && busy ? <ActivityIndicator size="small" color={tripColors.purple} /> : <Circle size={18} color="#D7C9E3" fill="#EEE7F6" />}
+            <Text style={[styles.taskText, index < progressStep && styles.taskDone, index === progressStep && busy && styles.taskActive, error && styles.taskMuted]}>{task}</Text>
           </View>)}
         </View>
         <View style={styles.noteCard}>
