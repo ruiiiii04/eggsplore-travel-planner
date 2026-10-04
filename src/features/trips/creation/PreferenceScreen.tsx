@@ -1,8 +1,7 @@
 import { router } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 import Svg, { Circle, Ellipse, Path, Rect } from "react-native-svg";
-import { Button } from "@/components/ui";
-import { TitleBlock, tripColors, WizardFrame } from "./CreationUI";
+import { CreationActionButton, TitleBlock, tripColors, WizardFrame } from "./CreationUI";
 import { useTripCreation } from "./TripCreationContext";
 
 const templates = [
@@ -16,9 +15,10 @@ const templates = [
 
 export default function PreferenceScreen() {
   const { data, update } = useTripCreation();
+  const nextPath = data.tripType === "group" ? "/trips/create/invite" : "/trips/create/creating";
   const custom = data.preference === "Custom";
   return (
-    <WizardFrame step={3} footer={<Button className="min-h-[54px] rounded-full" onPress={() => router.push("/trips/create/invite")}>Next</Button>}>
+    <WizardFrame step={3} tripType={data.tripType} footer={<CreationActionButton onPress={() => router.push(nextPath)}>Next</CreationActionButton>}>
       <View style={{ marginTop: 30, marginBottom: -9 }}><TitleBlock title="Choose a preference template" subtitle="Pick a style that matches your travel vibe\n(or skip and set it up later)" /></View>
       <View style={{ marginBottom: -3 }}><View style={styles.segment}>
         {["Templates", "Custom"].map((tab) => <Pressable key={tab} onPress={() => update({ preference: tab === "Custom" ? "Custom" : "Beach Trip" })} style={[styles.segmentButton, custom === (tab === "Custom") && styles.segmentActive]}><Text style={[styles.segmentText, custom !== (tab === "Custom") && styles.segmentInactive]}>{tab}</Text></Pressable>)}
@@ -43,7 +43,7 @@ export default function PreferenceScreen() {
           })}
         </View>
       )}
-      <Pressable onPress={() => { update({ preference: "" }); router.push("/trips/create/invite"); }} style={styles.skip}><Text style={styles.skipText}>Skip preferences</Text></Pressable>
+      <Pressable onPress={() => { update({ preference: "" }); router.push(nextPath); }} style={styles.skip}><Text style={styles.skipText}>Skip preferences</Text></Pressable>
     </WizardFrame>
   );
 }

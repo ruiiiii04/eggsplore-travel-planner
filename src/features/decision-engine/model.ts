@@ -5,7 +5,7 @@ export type Candidate = {
   location: string;
   tags: string[];
   image?: string;
-  cover: "bali" | "japan";
+  cover: "bali" | "japan" | "generic";
   up: number;
   down: number;
   confirmed?: boolean;
@@ -19,12 +19,17 @@ export type Stop = {
   day: number;
   time: string;
   top?: boolean;
+  existingId?: string;
+  description?: string | null;
+  activityCategory?: string | null;
+  existingSnapshot?: string;
 };
 export type Pool = {
   candidates: Candidate[];
   votes: Record<string, Vote>;
   draft: Stop[] | null;
   published: Stop[] | null;
+  draftExcludedExisting?: Record<string, string>;
 };
 export const tags = [
   "Culture",
@@ -128,7 +133,7 @@ export function tripDays(start?: string | null, end?: string | null) {
 /** A transparent vote-ranked starter, not a claim of AI or route optimisation. */
 export function makeDraft(pool: Pool, days: number): Stop[] {
   return pool.candidates
-    .filter((c) => pool.votes[c.id] !== "down" || c.confirmed)
+    .filter((c) => c.confirmed)
     .sort(
       (a, b) =>
         Number(!!b.confirmed) - Number(!!a.confirmed) ||
@@ -148,14 +153,22 @@ export function validTime(time: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
 }
 export function moveStop(stops: Stop[], id: string, offset: number) {
-  const i = stops.findIndex((s) => s.id === id),
-    j = i + offset;
-  if (i < 0 || j < 0 || j >= stops.length || stops[i].day !== stops[j].day)
-    return stops;
-  const next = stops.map((s) => ({ ...s }));
-  const time = next[i].time;
-  next[i].time = next[j].time;
-  next[j].time = time;
-  [next[i], next[j]] = [next[j], next[i]];
+  const index = stops.findIndex((stop) => stop.id === id);
+  return index < 0 ? stops : moveStopTo(stops, id, index + offset);
+}
+export function moveStopTo(stops: Stop[], id: string, targetIndex: number) {
+  const current = stops.findIndex((stop) => stop.id === id);
+  if (current < 0) return stops;
+  const day = stops[current].day;
+  const dayIndices = stops.map((stop, index) => stop.day === day ? index : -1).filter((index) => index >= 0);
+  const dayStops = dayIndices.map((index) => stops[index]);
+  if (targetIndex < 0 || targetIndex >= dayStops.length || targetIndex === dayIndices.indexOf(current)) return stops;
+  const moved = [...dayStops];
+  const [stop] = moved.splice(dayIndices.indexOf(current), 1);
+  moved.splice(targetIndex, 0, stop);
+  const next = [...stops];
+  dayIndices.forEach((globalIndex, dayIndex) => {
+    next[globalIndex] = { ...moved[dayIndex], time: dayStops[dayIndex].time };
+  });
   return next;
 }

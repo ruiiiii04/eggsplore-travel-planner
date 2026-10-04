@@ -7,6 +7,8 @@ export type Trip = {
   owner_id: string;
   start_date: string | null;
   end_date: string | null;
+  /** Number of manually planned days used while the trip has no calendar dates. */
+  flexible_day_count?: number;
   created_at: string;
 };
 export type TripStatus = "Live" | "Upcoming" | "Past";

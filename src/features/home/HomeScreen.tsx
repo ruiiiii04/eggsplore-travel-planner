@@ -80,7 +80,7 @@ function DestinationCard({
       accessibilityLabel={`Open ${trip.title}`}
       onPress={() => {
         void rememberTrip(trip.id);
-        router.push({ pathname: "/trips/[id]/itinerary", params: { id: trip.id } });
+        router.push({ pathname: "/trips/[id]/itinerary", params: { id: trip.id, from: "home" } });
       }}
       style={[styles.tripCard, spacingAfter && styles.tripCardSpacing]}
     >
@@ -382,13 +382,26 @@ export default function HomeScreen() {
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           )}
-          {visible.map((trip, index) => (
-            <DestinationCard
-              key={trip.id}
-              trip={trip}
-              spacingAfter={index < visible.length - 1}
-            />
-          ))}
+          {visible.length > 0 && (
+            <ScrollView
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={visible.length > 3}
+              style={{
+                height: Math.min(visible.length, 3) * 146,
+                maxHeight: 438,
+                flexGrow: 0,
+              }}
+              contentContainerStyle={{ paddingBottom: 2 }}
+            >
+              {visible.map((trip, index) => (
+                <DestinationCard
+                  key={trip.id}
+                  trip={trip}
+                  spacingAfter={index < visible.length - 1}
+                />
+              ))}
+            </ScrollView>
+          )}
           {!loading && !error && visible.length === 0 && (
             <View style={styles.emptyTrips}>
               <Text style={styles.emptyTitle}>
@@ -405,7 +418,7 @@ export default function HomeScreen() {
             <QuickAccess icon={<ThumbsUp size={28} color={purple} strokeWidth={1.8} />} label={["Pending", "Votes"]} onPress={() => {
               if (!currentTrip) { setQuickMessage("Create a trip to start voting on places."); setSheet("message"); return; }
               void rememberTrip(currentTrip.id);
-              router.push({ pathname: "/trips/[id]/candidates", params: { id: currentTrip.id } });
+              router.push({ pathname: "/trips/[id]/candidates", params: { id: currentTrip.id, from: "home" } });
             }} />
             <QuickAccess icon={<ShieldAlert size={28} color={purple} strokeWidth={1.8} />} label={["Emergency", "Info"]} onPress={() => setSheet("emergency")} />
             <QuickAccess icon={<UserRoundPlus size={28} color={purple} strokeWidth={1.8} />} label={["Invite", "Members"]} onPress={() => setSheet("invite")} />

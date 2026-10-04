@@ -257,6 +257,7 @@ export default function ProfileScreen() {
           <Text style={{ fontFamily: "Inter" }} className="text-sm text-muted">
             {user?.email}
           </Text>
+          {!!profile?.username && <Text style={{ fontFamily: "Inter" }} className="text-sm text-muted">@{profile.username}</Text>}
           <Text style={{ fontFamily: "Inter" }} className="text-sm text-brand">
             Explorer
           </Text>

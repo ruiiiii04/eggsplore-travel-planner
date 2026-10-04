@@ -1,22 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { ArrowLeft, Check, Circle } from "lucide-react-native";
+import { Check, Circle } from "lucide-react-native";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth/useAuth";
 import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
 import { validateTrip } from "@/features/trips/model";
-import { tripColors } from "./CreationUI";
+import { CreationHeader, tripColors } from "./CreationUI";
 import { useTripCreation } from "./TripCreationContext";
 
-const tasks = ["Drafting your day-by-day plan", "Saving your trip", "Saving itinerary activities", "Finishing your trip"];
+const itineraryTasks = ["Drafting your day-by-day plan", "Saving your trip", "Saving itinerary activities", "Finishing your trip"];
+const flexibleTasks = ["Preparing your flexible trip", "Saving your trip", "Finishing your trip"];
 type GeneratedItinerary = { days: { date: string; activities: { time: string; title: string; description: string; location: string }[] }[] };
 
 export default function CreatingScreen() {
   const { user } = useAuth();
   const { data, update } = useTripCreation();
+  const startDate = data.startDate.trim();
+  const endDate = data.endDate.trim();
+  const hasDates = !!startDate && !!endDate;
+  const tasks = hasDates ? itineraryTasks : flexibleTasks;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
   const [progressStep, setProgressStep] = useState(0);
@@ -32,21 +37,21 @@ export default function CreatingScreen() {
     try {
       if (!user) throw new Error("Please sign in again before creating a trip.");
       const title = data.title.trim() || (data.destination ? `Trip to ${data.destination.trim()}` : "");
-      const validation = validateTrip(title, data.startDate.trim(), data.endDate.trim());
+      if (!!startDate !== !!endDate) throw new Error("Add both travel dates, or leave both blank to decide later.");
+      const validation = validateTrip(title, startDate, endDate);
       if (validation) throw new Error(validation);
       if (!data.destination.trim()) throw new Error("Add a destination before creating your trip.");
-      if (!data.startDate.trim() || !data.endDate.trim()) throw new Error("Add your travel dates so Eggsplore can build a day-by-day itinerary.");
-      const tripDays = Math.floor((Date.parse(`${data.endDate}T00:00:00Z`) - Date.parse(`${data.startDate}T00:00:00Z`)) / 86_400_000) + 1;
+      const tripDays = hasDates ? Math.floor((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1 : 0;
       if (tripDays > 14) throw new Error("AI itinerary generation currently supports trips up to 14 days.");
 
       const client = getSupabase();
-      if (!itineraryDraft.current) {
+      if (hasDates && !itineraryDraft.current) {
         setProgressStep(0);
         const { data: generated, error: generationError } = await client.functions.invoke("generate-itinerary", {
           body: {
             destination: data.destination.trim(),
-            startDate: data.startDate.trim(),
-            endDate: data.endDate.trim(),
+            startDate,
+            endDate,
             tripType: data.tripType || "solo",
             budget: data.budget,
             preferences: data.preference === "Custom" ? data.customPreferences : [data.preference].filter(Boolean),
@@ -72,8 +77,8 @@ export default function CreatingScreen() {
           owner_id: user.id,
           title,
           destination: data.destination.trim(),
-          start_date: data.startDate.trim(),
-          end_date: data.endDate.trim(),
+          start_date: hasDates ? startDate : null,
+          end_date: hasDates ? endDate : null,
         }).select("id").single();
         if (failure) throw failure;
         createdTripId.current = created.id;
@@ -81,25 +86,41 @@ export default function CreatingScreen() {
 
       setProgressStep(2);
       const tripId = createdTripId.current;
-      if (!tripId || !itineraryDraft.current) throw new Error("The generated trip data was lost. Please try again.");
-      const { error: clearFailure } = await client.from("itinerary_items").delete().eq("trip_id", tripId);
-      if (clearFailure) throw clearFailure;
-      const activities = itineraryDraft.current.days.flatMap((day) => day.activities.map((activity) => ({
-        trip_id: tripId,
-        title: activity.title.trim(),
-        description: activity.description.trim(),
-        location_name: activity.location.trim(),
-        // Preserve destination local wall-clock time as UTC fields; the UI reads
-        // the date and HH:mm directly instead of shifting it to the phone zone.
-        start_time: `${day.date}T${activity.time}:00Z`,
-        position: 0,
-      }))).map((activity, position) => ({ ...activity, position }));
-      const { error: itineraryFailure } = await client.from("itinerary_items").insert(activities);
-      if (itineraryFailure) throw itineraryFailure;
+      if (!tripId) throw new Error("The trip could not be saved. Please try again.");
+      if (hasDates) {
+        if (!itineraryDraft.current) throw new Error("The generated itinerary was lost. Please try again.");
+        const { error: clearFailure } = await client.from("itinerary_items").delete().eq("trip_id", tripId);
+        if (clearFailure) throw clearFailure;
+        const activities = itineraryDraft.current.days.flatMap((day) => day.activities.map((activity) => ({
+          trip_id: tripId,
+          title: activity.title.trim(),
+          description: activity.description.trim(),
+          location_name: activity.location.trim(),
+          // Preserve destination local wall-clock time as UTC fields; the UI reads
+          // the date and HH:mm directly instead of shifting it to the phone zone.
+          start_time: `${day.date}T${activity.time}:00Z`,
+          position: 0,
+        }))).map((activity, position) => ({ ...activity, position }));
+        const { error: itineraryFailure } = await client.from("itinerary_items").insert(activities);
+        if (itineraryFailure) throw itineraryFailure;
+      }
+
+      let invitationStatus = "";
+      let invitationFailed = false;
+      if (data.invitees.length) {
+        const { error: memberError } = await client.from("trip_members").upsert(
+          data.invitees.map((person) => ({ trip_id: tripId, user_id: person.id, role: "member" })),
+          { onConflict: "trip_id,user_id", ignoreDuplicates: true },
+        );
+        if (memberError) {
+          invitationFailed = true;
+          invitationStatus = `Trip created, but some members could not be added. You can add them from the trip later. ${errorMessage(memberError)}`;
+        } else invitationStatus = `${data.invitees.length} member${data.invitees.length === 1 ? "" : "s"} added to the trip.`;
+      }
 
       completed.current = true;
       setProgressStep(3);
-      update({ title, tripId });
+      update({ title, tripId, invitationStatus, invitationFailed });
       router.replace("/trips/create/created");
     } catch (cause) {
       setError(errorMessage(cause));
@@ -113,11 +134,11 @@ export default function CreatingScreen() {
 
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
-      <View style={styles.header}><Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" style={styles.back}><ArrowLeft size={21} color={tripColors.dark} /></Pressable></View>
+      <CreationHeader onBack={() => { if (router.canGoBack()) router.back(); else router.replace(data.tripType === "group" ? "/trips/create/invite" : "/trips/create/preferences"); }} />
       <View style={styles.content}>
         <View style={styles.art}><Image source={require("../../../../assets/figma-creating-mascot.png")} resizeMode="contain" style={styles.mascot} /></View>
         <Text style={styles.title}>{error ? "We couldn't save your trip" : "Creating Your Trip..."}</Text>
-        <Text style={styles.subtitle}>{error || "Our AI is crafting the perfect itinerary just for you!"}</Text>
+        <Text style={styles.subtitle}>{error || (hasDates ? "Our AI is crafting the perfect itinerary just for you!" : "Your trip is ready. You can collect and vote on places before choosing dates.")}</Text>
         <View style={styles.tasks}>
           {tasks.map((task, index) => <View key={task} style={styles.task}>
             {error ? <Circle size={18} color="#D7C9E3" /> : index < progressStep ? <Check size={18} color="white" fill={tripColors.purple} /> : index === progressStep && busy ? <ActivityIndicator size="small" color={tripColors.purple} /> : <Circle size={18} color="#D7C9E3" fill="#EEE7F6" />}
@@ -138,8 +159,6 @@ export default function CreatingScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#FBF9FC" },
-  header: { height: 47, paddingHorizontal: 24, justifyContent: "center" },
-  back: { width: 36, height: 36, justifyContent: "center" },
   content: { flex: 1, alignItems: "center", paddingHorizontal: 30, paddingTop: 5, paddingBottom: 98 },
   art: { width: 280, height: 218, alignItems: "center", justifyContent: "center" },
   mascot: { width: 280, height: 218 },

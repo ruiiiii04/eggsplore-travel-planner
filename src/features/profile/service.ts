@@ -1,7 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import type { Profile } from "./types";
 const columns =
-  "id,display_name,avatar_url,preferences,emergency_contact,updated_at";
+  "id,username,display_name,avatar_url,preferences,emergency_contact,updated_at";
 export async function readProfile(userId: string): Promise<Profile> {
   const { data, error } = await getSupabase()
     .from("profiles")

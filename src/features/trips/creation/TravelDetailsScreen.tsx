@@ -2,9 +2,8 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { CalendarDays, Lightbulb, MapPin, Search, Wallet, X } from "lucide-react-native";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { Button } from "@/components/ui";
 import { validateTrip } from "@/features/trips/model";
-import { tripColors, uiStyles, WizardFrame } from "./CreationUI";
+import { CreationActionButton, tripColors, uiStyles, WizardFrame } from "./CreationUI";
 import { useTripCreation } from "./TripCreationContext";
 
 const destinations = ["Bali", "Tokyo", "Seoul", "Bangkok"];
@@ -24,14 +23,20 @@ export default function TravelDetailsScreen() {
   }
   function continueToPreferences() {
     if (!data.destination.trim()) { setFormError("Add a destination to continue."); return; }
-    if (!data.startDate.trim() || !data.endDate.trim()) { setFormError("Add both travel dates to generate your AI itinerary."); return; }
-    const validation = validateTrip("Trip", data.startDate.trim(), data.endDate.trim());
+    const start = data.startDate.trim();
+    const end = data.endDate.trim();
+    if (!!start !== !!end) { setFormError("Add both dates, or leave both blank to decide later."); return; }
+    const validation = validateTrip("Trip", start, end);
     if (validation) { setFormError(validation); return; }
+    if (start && end) {
+      const days = Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
+      if (days > 14) { setFormError("AI itinerary generation supports trips up to 14 days. You can create a flexible trip without dates instead."); return; }
+    }
     setFormError("");
     router.push("/trips/create/preferences");
   }
   return (
-    <WizardFrame step={2} footer={<Button className="min-h-[54px] rounded-full" onPress={continueToPreferences}>Next</Button>}>
+    <WizardFrame step={2} tripType={data.tripType} footer={<CreationActionButton onPress={continueToPreferences}>Next</CreationActionButton>}>
       <View style={[uiStyles.card, { marginHorizontal: -10 }]}>
         <SectionHeading icon={<MapPin size={19} color={tripColors.purple} />} title="Destination" />
         <View style={styles.searchInput}>
@@ -46,11 +51,12 @@ export default function TravelDetailsScreen() {
       </View>
 
       <View style={[uiStyles.card, { marginHorizontal: -10 }]}>
-        <SectionHeading icon={<CalendarDays size={19} color={tripColors.purple} />} title="Travel Dates" />
+        <SectionHeading icon={<CalendarDays size={19} color={tripColors.purple} />} title="Travel Dates (optional)" />
         <View style={styles.dateRow}>
           <DateInput label="From" value={data.startDate} onChangeText={(startDate) => { update({ startDate }); setFormError(""); }} />
           <DateInput label="To" value={data.endDate} onChangeText={(endDate) => { update({ endDate }); setFormError(""); }} />
         </View>
+        <Text style={{ color: "#89799A", fontFamily: "Inter", fontSize: 10, lineHeight: 15, marginTop: 8 }}>Leave both blank to create a flexible trip and explore candidates first. Add both dates to generate an AI itinerary.</Text>
         {!!formError && <Text accessibilityRole="alert" style={{ color: "#B43F60", fontFamily: "Inter", fontSize: 11, marginTop: 9 }}>{formError}</Text>}
       </View>
 

@@ -416,3 +416,9 @@ enabled = true
 
 [functions.generate-itinerary]
 verify_jwt = true
+
+[functions.generate-candidates]
+verify_jwt = true
+
+[functions.send-trip-invitations]
+verify_jwt = true

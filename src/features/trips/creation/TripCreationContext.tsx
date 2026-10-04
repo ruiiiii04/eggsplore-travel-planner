@@ -9,8 +9,10 @@ export type TripCreationData = {
   budget: string;
   preference: string;
   customPreferences: string[];
-  invitees: string[];
+  invitees: { id: string; username: string; displayName: string }[];
   tripId: string | null;
+  invitationStatus: string;
+  invitationFailed: boolean;
 };
 
 const initialData: TripCreationData = {
@@ -24,6 +26,8 @@ const initialData: TripCreationData = {
   customPreferences: [],
   invitees: [],
   tripId: null,
+  invitationStatus: "",
+  invitationFailed: false,
 };
 
 type ContextValue = {

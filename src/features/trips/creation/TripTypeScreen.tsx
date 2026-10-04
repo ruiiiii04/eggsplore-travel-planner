@@ -1,14 +1,13 @@
 import { router } from "expo-router";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui";
-import { tripColors, WizardFrame } from "./CreationUI";
+import { CreationActionButton, tripColors, WizardFrame } from "./CreationUI";
 import { useTripCreation } from "./TripCreationContext";
 
 export default function TripTypeScreen() {
   const { data, update } = useTripCreation();
   return (
-    <WizardFrame step={1} footer={<Button className="min-h-[54px] rounded-full" onPress={() => router.push("/trips/create/details")}>Next</Button>}>
+    <WizardFrame step={1} tripType={data.tripType} footer={<CreationActionButton onPress={() => router.push("/trips/create/details")}>Next</CreationActionButton>}>
       <Text style={styles.title}>How do you want to travel?</Text>
       <Text style={styles.subtitle}>Choose your trip type to get started</Text>
       <View style={styles.choices}>

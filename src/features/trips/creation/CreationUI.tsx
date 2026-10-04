@@ -15,28 +15,29 @@ export const tripColors = {
   green: "#3A9B73",
 };
 
-const steps = ["Trip Type", "Details", "Preferences", "Invite"];
+const groupSteps = ["Trip Type", "Details", "Preferences", "Invite"];
+const soloSteps = ["Trip Type", "Details", "Preferences"];
 
 export function WizardFrame({
   step,
   children,
   footer,
   onBack,
+  tripType,
 }: {
   step: number;
   children: ReactNode;
   footer: ReactNode;
   onBack?: () => void;
+  tripType?: "solo" | "group" | null;
 }) {
+  const steps = tripType === "solo" ? soloSteps : groupSteps;
   return (
     <SafeAreaView edges={["top", "left", "right", "bottom"]} style={styles.safe}>
-      <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack ?? (() => router.back())} style={styles.back}>
-          <ArrowLeft size={22} color={tripColors.dark} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Create Trip</Text>
-        <View style={styles.back} />
-      </View>
+      <CreationHeader title="Create Trip" onBack={onBack ?? (() => {
+        if (router.canGoBack()) router.back();
+        else router.replace(step === 1 ? "/trips/create" : step === 2 ? "/trips/create/type" : step === 3 ? "/trips/create/details" : "/trips/create/preferences");
+      })} />
       <View style={styles.stepper}>
         {steps.map((label, index) => {
           const number = index + 1;
@@ -58,6 +59,26 @@ export function WizardFrame({
       </ScrollView>
       <View style={styles.footer}>{footer}</View>
     </SafeAreaView>
+  );
+}
+
+export function CreationHeader({ title, onBack, backLabel = "Go back" }: { title?: string; onBack?: () => void; backLabel?: string }) {
+  return (
+    <View style={styles.header}>
+      <Pressable accessibilityRole="button" accessibilityLabel={backLabel} onPress={onBack ?? (() => router.back())} style={styles.back}>
+        <ArrowLeft size={22} color={tripColors.dark} />
+      </Pressable>
+      {title ? <Text style={styles.headerTitle}>{title}</Text> : <View style={styles.back} />}
+      <View style={styles.back} />
+    </View>
+  );
+}
+
+export function CreationActionButton({ children, onPress, variant = "primary", disabled = false }: { children: string; onPress: () => void; variant?: "primary" | "secondary"; disabled?: boolean }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.actionButton, variant === "primary" ? styles.actionButtonPrimary : styles.actionButtonSecondary, disabled && styles.actionButtonDisabled, pressed && !disabled && styles.actionButtonPressed]}>
+      <Text style={[styles.actionButtonText, variant === "primary" ? styles.actionButtonTextPrimary : styles.actionButtonTextSecondary]}>{children}</Text>
+    </Pressable>
   );
 }
 
@@ -106,7 +127,15 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: tripColors.canvas },
   header: { height: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24 },
   back: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: tripColors.dark, fontFamily: "Fredoka", fontSize: 26 },
+  headerTitle: { position: "absolute", left: 64, right: 64, textAlign: "center", color: tripColors.dark, fontFamily: "Fredoka", fontSize: 18, fontWeight: "700" },
+  actionButton: { minHeight: 54, borderRadius: 28, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  actionButtonPrimary: { backgroundColor: tripColors.purple, borderColor: tripColors.purple },
+  actionButtonSecondary: { backgroundColor: tripColors.canvas, borderColor: "#DED0ED" },
+  actionButtonDisabled: { opacity: 0.5 },
+  actionButtonPressed: { opacity: 0.75 },
+  actionButtonText: { fontFamily: "Inter", fontSize: 15, fontWeight: "700" },
+  actionButtonTextPrimary: { color: tripColors.white },
+  actionButtonTextSecondary: { color: "#8050C5" },
   stepper: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 18, paddingBottom: 28 },
   stepItem: { flex: 1, alignItems: "center", position: "relative" },
   stepDot: { width: 32, height: 32, borderRadius: 17, borderWidth: 1.5, borderColor: "#E8DDF3", backgroundColor: "#F0EAF7", alignItems: "center", justifyContent: "center", zIndex: 1 },
