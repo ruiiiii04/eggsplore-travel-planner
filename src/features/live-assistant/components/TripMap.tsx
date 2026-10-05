@@ -1,12 +1,14 @@
+import { View } from "react-native";
 import MapFallback from "./MapFallback";
 import type { TripMapProps } from "../types";
 
-// Web/default implementation. Metro selects TripMap.native.tsx on Android/iOS.
 export default function TripMap(props: TripMapProps) {
   return (
-    <MapFallback
-      {...props}
-      reason="The interactive map is available in the Android/iOS development build. This browser preview shows sample places."
-    />
+    <View style={{ flex: 1, paddingTop: 88, paddingBottom: 60 }}>
+      <MapFallback
+        {...props}
+        reason="Browser preview. Open the app on your phone for the interactive map."
+      />
+    </View>
   );
 }

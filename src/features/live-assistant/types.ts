@@ -16,4 +16,7 @@ export type TripMapProps = {
   places: readonly SamplePlace[];
   selectedPlaceId: string | null;
   onSelectPlace: (place: SamplePlace) => void;
+  routePlaces?: readonly SamplePlace[];
+  resetSignal?: number;
+  mutedMap?: boolean;
 };

@@ -1,167 +1,207 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
-  TouchableOpacity,
-  ScrollView,
+  Platform,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
-import Mapbox from "@rnmapbox/maps";
-import { List, MapPin, RotateCcw } from "lucide-react-native";
+import MapView, { Marker, Polyline } from "react-native-maps";
+import Svg, { Path } from "react-native-svg";
+import { MapPin, RotateCcw, Utensils } from "lucide-react-native";
+
 import { colors } from "@/styles/theme";
-import { SAMPLE_CENTER } from "../data/samplePlaces";
+import {
+  SAMPLE_REGION,
+  crowdColors,
+  sampleCrowd,
+} from "../data/samplePlaces";
 import type { TripMapProps } from "../types";
-import PlaceList from "./PlaceList";
 
-export default function NativeTripMap(props: TripMapProps) {
-  const camera = useRef<Mapbox.Camera>(null);
+const pastelMapStyle = [
+  {
+    elementType: "geometry",
+    stylers: [{ color: "#F2E9F3" }],
+  },
+  {
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#795591" }],
+  },
+  {
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#FAF6FC" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#C4CEF3" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#FFFAFF" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#DCE6D1" }],
+  },
+];
+
+export default function NativeTripMap({
+  places,
+  selectedPlaceId,
+  onSelectPlace,
+  routePlaces = [],
+  resetSignal = 0,
+  mutedMap = true,
+}: TripMapProps) {
+  const map = useRef<MapView>(null);
+
   const [ready, setReady] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [listOpen, setListOpen] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    setReady(false);
-    setLoaded(false);
-    setFailed(false);
-    Promise.resolve(
-      Mapbox.setAccessToken(
-        process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN?.trim() ?? "",
-      ),
-    )
-      .then(() => {
-        if (active) setReady(true);
-      })
-      .catch(() => {
-        if (active) setFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [attempt]);
+    if (ready) return;
 
-  useEffect(() => {
-    if (!ready || loaded) return;
-    const timeout = setTimeout(() => setFailed(true), 20000);
+    const timeout = setTimeout(() => {
+      setTimedOut(true);
+    }, 20000);
+
     return () => clearTimeout(timeout);
-  }, [ready, loaded, attempt]);
+  }, [ready, attempt]);
 
-  const showError = failed && !loaded;
-  const resetCamera = () =>
-    camera.current?.setCamera({
-      centerCoordinate: SAMPLE_CENTER,
-      zoomLevel: 12,
-      animationDuration: 500,
-    });
+  useEffect(() => {
+    if (!ready) return;
+
+    map.current?.animateToRegion(SAMPLE_REGION, 500);
+  }, [resetSignal, ready]);
+
+  const retry = () => {
+    setReady(false);
+    setTimedOut(false);
+    setAttempt((value) => value + 1);
+  };
 
   return (
     <View style={styles.container}>
-      {ready && (
-        <Mapbox.MapView
-          key={attempt}
-          style={styles.map}
-          styleURL={Mapbox.StyleURL.Street}
-          logoEnabled
-          attributionEnabled
-          scaleBarEnabled={false}
-          onDidFinishLoadingMap={() => {
-            setLoaded(true);
-            setFailed(false);
-          }}
-          onMapLoadingError={() => {
-            setLoaded(false);
-            setFailed(true);
-          }}
-        >
-          <Mapbox.Camera
-            ref={camera}
-            defaultSettings={{ centerCoordinate: SAMPLE_CENTER, zoomLevel: 12 }}
+      {/* Default provider: Apple Maps on iOS, Google Maps on Android. */}
+      <MapView
+        key={attempt}
+        ref={map}
+        style={styles.map}
+        initialRegion={SAMPLE_REGION}
+        mapType={
+          Platform.OS === "ios" && mutedMap
+            ? "mutedStandard"
+            : "standard"
+        }
+        customMapStyle={
+          Platform.OS === "android" && mutedMap
+            ? pastelMapStyle
+            : undefined
+        }
+        onMapReady={() => {
+          setReady(true);
+          setTimedOut(false);
+        }}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        toolbarEnabled={false}
+      >
+        {/* Sample stop connection, not calculated walking directions. */}
+        {routePlaces.length > 1 && (
+          <Polyline
+            coordinates={routePlaces.map((place) => ({
+              latitude: place.latitude,
+              longitude: place.longitude,
+            }))}
+            strokeColor="#8653AF"
+            strokeWidth={4}
+            lineDashPattern={[10, 5]}
           />
-          {props.places.map((place) => (
-            <Mapbox.MarkerView
+        )}
+
+        {places.map((place) => {
+          const selected = selectedPlaceId === place.id;
+          const markerColor = crowdColors[sampleCrowd(place)];
+          const isFoodPlace = place.tags.includes("Foodie");
+
+          return (
+            <Marker
               key={place.id}
-              coordinate={[place.longitude, place.latitude]}
-              anchor={{ x: 0.5, y: 1 }}
-              allowOverlap
+              identifier={place.id}
+              coordinate={{
+                latitude: place.latitude,
+                longitude: place.longitude,
+              }}
+              // CHANGED: anchor the SVG's pointed tip to the location.
+              anchor={{ x: 0.5, y: 54 / 58 }}
+              accessibilityLabel={`View ${place.name}`}
+              onPress={() => onSelectPlace(place)}
+              zIndex={selected ? 10 : 1}
+              tracksViewChanges
             >
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel={`View ${place.name}`}
-                accessibilityState={{
-                  selected: props.selectedPlaceId === place.id,
-                }}
-                onPress={() => props.onSelectPlace(place)}
-                activeOpacity={0.75}
-                style={[
-                  styles.pin,
-                  props.selectedPlaceId === place.id && styles.selectedPin,
-                ]}
-              >
-                <MapPin size={26} color={colors.white} />
-              </TouchableOpacity>
-            </Mapbox.MarkerView>
-          ))}
-        </Mapbox.MapView>
-      )}
-      {!loaded && !showError && (
+              {/* CHANGED: one shape, with an outline around the entire pin. */}
+              <View collapsable={false} style={styles.marker}>
+                <Svg width={48} height={58} viewBox="0 0 48 58">
+                  <Path
+                    d="
+                      M 24 3
+                      C 12.4 3 4 11.6 4 22
+                      C 4 35 17 47 24 54
+                      C 31 47 44 35 44 22
+                      C 44 11.6 35.6 3 24 3
+                      Z
+                    "
+                    fill={markerColor}
+                    stroke={selected ? "#683A94" : "#FFFFFF"}
+                    strokeWidth={3}
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+
+                <View
+                  pointerEvents="none"
+                  style={styles.markerIcon}
+                >
+                  {isFoodPlace ? (
+                    <Utensils size={20} color={colors.white} />
+                  ) : (
+                    <MapPin size={22} color={colors.white} />
+                  )}
+                </View>
+              </View>
+            </Marker>
+          );
+        })}
+      </MapView>
+
+      {!ready && !timedOut && (
         <View pointerEvents="none" style={styles.loading}>
           <ActivityIndicator color={colors.brand} />
-          <Text style={styles.text}>Loading map…</Text>
+          <Text style={styles.text}>Starting map…</Text>
         </View>
       )}
-      {showError && (
-        <View style={styles.error}>
+
+      {timedOut && !ready && (
+        <View style={styles.notice}>
           <Text accessibilityRole="alert" style={styles.text}>
-            Map tiles could not load. Check your connection and Mapbox token.
-            You can still explore the sample places.
+            The map is taking longer than expected. Check your
+            connection and try again.
           </Text>
-          <Pressable
+
+          <TouchableOpacity
             accessibilityRole="button"
-            onPress={() => setAttempt((value) => value + 1)}
+            onPress={retry}
+            activeOpacity={0.75}
             style={styles.retry}
           >
             <RotateCcw size={18} color={colors.brand} />
             <Text style={styles.buttonText}>Retry map</Text>
-          </Pressable>
-        </View>
-      )}
-      <View style={styles.toolbar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Toggle sample places"
-          accessibilityState={{ expanded: listOpen }}
-          onPress={() => setListOpen((value) => !value)}
-          style={styles.tool}
-        >
-          <List size={20} color={colors.brand} />
-          <Text style={styles.buttonText}>Places</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Reset map to Osaka"
-          onPress={resetCamera}
-          disabled={!ready}
-          style={styles.tool}
-        >
-          <RotateCcw size={20} color={colors.brand} />
-          <Text style={styles.buttonText}>Reset</Text>
-        </Pressable>
-      </View>
-      {listOpen && (
-        <View style={styles.placePanel}>
-          <ScrollView contentContainerStyle={{ padding: 12 }}>
-            <PlaceList
-              {...props}
-              onSelectPlace={(place) => {
-                setListOpen(false);
-                props.onSelectPlace(place);
-              }}
-            />
-          </ScrollView>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -169,43 +209,45 @@ export default function NativeTripMap(props: TripMapProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.lavender },
-  map: { flex: 1 },
-  pin: {
+  container: {
+    flex: 1,
+    backgroundColor: "#F2EAFB",
+  },
+  map: {
+    flex: 1,
+  },
+
+  // CHANGED: fixed SVG dimensions replace the circle/triangle styles.
+  marker: {
     width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.brand,
-    borderWidth: 3,
-    borderColor: colors.white,
+    height: 58,
+  },
+  markerIcon: {
+    position: "absolute",
+    top: 11,
+    left: 0,
+    width: 48,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },
-  selectedPin: { backgroundColor: colors.ink },
-  toolbar: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    flexDirection: "row",
-    gap: 8,
+
+  buttonText: {
+    color: colors.brand,
+    fontSize: 14,
+    fontWeight: "600",
   },
-  tool: {
-    minHeight: 46,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: colors.white,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
+  text: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 21,
+    flexShrink: 1,
   },
-  buttonText: { color: colors.brand, fontSize: 14, fontWeight: "600" },
-  text: { color: colors.ink, fontSize: 14, lineHeight: 21 },
   loading: {
     position: "absolute",
     top: "42%",
     alignSelf: "center",
+    maxWidth: "85%",
     backgroundColor: colors.white,
     borderRadius: 14,
     padding: 16,
@@ -213,28 +255,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  error: {
+  notice: {
     position: "absolute",
-    top: 76,
+    top: 88,
     left: 16,
     right: 16,
     padding: 16,
-    gap: 12,
+    gap: 8,
     borderRadius: 16,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  placePanel: {
-    position: "absolute",
-    top: 70,
-    left: 16,
-    right: 16,
-    maxHeight: "65%",
-    borderRadius: 16,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
+  retry: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  retry: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 },
 });
