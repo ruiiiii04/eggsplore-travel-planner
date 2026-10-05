@@ -6,7 +6,7 @@
     "scheme": "eggsplore",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-router", "expo-status-bar"],
+    "plugins": ["expo-router", "expo-status-bar", "@rnmapbox/maps"],
     "ios": {
       "supportsTablet": true
     },
