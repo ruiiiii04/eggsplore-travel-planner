@@ -8,6 +8,7 @@ export type TravelPreference = {
   companion?: string;
   spendingOrder?: string[];
   interests?: string[];
+  categoryWeights?: Record<string, number>;
   createdAt?: string;
   [key: string]: unknown;
 };

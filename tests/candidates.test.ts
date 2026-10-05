@@ -17,8 +17,11 @@ test("votes toggle off without phantom count and switch direction", () => {
   assert.equal(totals(c, "up").percent, 100);
   assert.equal(totals(c, "down").percent, 0);
 });
-test("draft respects negative votes, trip duration, rankings and input immutability", () => {
-  const candidates = seedCandidates("Tokyo");
+test("draft respects shared selection, trip duration, vote rankings and input immutability", () => {
+  const candidates = seedCandidates("Tokyo").map((candidate, index) => ({
+    ...candidate,
+    confirmed: index > 0 && index < 5,
+  }));
   const original = candidates.map((c) => c.id);
   const stops = makeDraft(
     {
@@ -43,6 +46,8 @@ test("draft respects negative votes, trip duration, rankings and input immutabil
 });
 test("destination defaults and date/time constraints", () => {
   assert.equal(seedCandidates("Paris").length, 0);
+  assert.equal(seedCandidates("Japan").length, 0);
+  assert.equal(seedCandidates("Indonesia").length, 0);
   assert.match(seedCandidates("Osaka")[0].name, /Universal/);
   assert.equal(tripDays("2026-10-03", "2026-10-05"), 3);
   assert.equal(validTime("24:00"), false);

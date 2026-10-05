@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Image,
   KeyboardAvoidingView,
   Keyboard,
@@ -14,7 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
   ArrowLeft,
   ArrowRight,
@@ -36,14 +37,30 @@ import {
   Trash2,
   X,
 } from "lucide-react-native";
+import { randomUUID } from "expo-crypto";
+import {
+  requestWithTimeout,
+  RequestTimeoutError,
+} from "../../lib/requestTimeout";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../auth/AuthProvider";
 import { getSupabase } from "../../lib/supabase";
 import { errorMessage } from "../../lib/errors";
 import { createPoolStore, poolCandidateBase } from "./persistence";
+import { createSnapshotReader } from "./sharedSnapshot";
+import {
+  normalizePlace,
+  makeReviewDraft,
+  synchronizeReviewDraft,
+  setCandidateDraftSelection,
+  removeReviewStop,
+} from "./reviewDraft";
+import { readPublicationResult, type PublicationResult } from "./publication";
 import type { Trip } from "../trips/model";
 import {
   Candidate,
+  candidateFilterCounts,
+  candidateMatchesFilter,
   Pool,
   Stop,
   Vote,
@@ -51,7 +68,6 @@ import {
   moveStopTo,
   seedCandidates,
   tags,
-  toggleVote,
   totals,
   tripDays,
   validTime,
@@ -64,69 +80,57 @@ const purple = "#7D49D5",
 const bali = require("../../../assets/trip-bali-cover.png"),
   japan = require("../../../assets/trip-japan-cover.png");
 const poolStore = createPoolStore({
-  read: async (userId, tripId) => {
-    const client = getSupabase();
-    const { data: row, error: poolError } = await client
-      .from("trip_candidate_pools")
-      .select("candidates,draft,draft_excluded_existing,published,updated_at")
-      .eq("trip_id", tripId)
-      .maybeSingle();
-    if (poolError) throw poolError;
-    if (!row) return null;
-    const { data: votes, error: voteError } = await client
-      .from("trip_candidate_votes")
-      .select("candidate_id,user_id,vote")
-      .eq("trip_id", tripId);
-    if (voteError) throw voteError;
-    const ownVotes: Record<string, Vote> = {};
-    const otherVotes: Record<string, { up: number; down: number }> = {};
-    for (const entry of votes ?? []) {
-      const vote = entry.vote as Vote;
-      if (entry.user_id === userId) ownVotes[entry.candidate_id] = vote;
-      else {
-        const totals = otherVotes[entry.candidate_id] ?? { up: 0, down: 0 };
-        if (vote === "up") totals.up++;
-        else if (vote === "down") totals.down++;
-        otherVotes[entry.candidate_id] = totals;
-      }
-    }
-    const candidates = (row.candidates ?? []) as Candidate[];
-    return {
-      revision: row.updated_at,
-      otherVotes,
-      pool: {
-        candidates: candidates.map((candidate) => ({
-          ...candidate,
-          up: Number(candidate.up || 0) + (otherVotes[candidate.id]?.up ?? 0),
-          down: Number(candidate.down || 0) + (otherVotes[candidate.id]?.down ?? 0),
-        })),
-        votes: ownVotes,
-        draft: row.draft as Stop[] | null,
-        draftExcludedExisting: row.draft_excluded_existing ?? {},
-        published: row.published as Stop[] | null,
-      },
-    };
+  read: createSnapshotReader(async (tripId, knownRevision) => {
+    const { data, error } = await requestWithTimeout((signal) =>
+      getSupabase()
+        .rpc("read_trip_candidate_changes", {
+          target_trip: tripId,
+          known_revision: knownRevision,
+        })
+        .abortSignal(signal),
+    );
+    if (error) throw error;
+    return data;
+  }),
+  saveVote: async (_userId, tripId, candidateId, vote) => {
+    const { error } = await requestWithTimeout((signal) =>
+      getSupabase()
+        .rpc("set_trip_candidate_vote", {
+          target_trip: tripId,
+          target_candidate: candidateId,
+          next_vote: vote,
+        })
+        .abortSignal(signal),
+    );
+    if (error) throw error;
   },
   initialize: async (_userId, tripId, candidates) => {
-    const { error } = await getSupabase().rpc("initialize_trip_candidate_pool", {
-      target_trip: tripId,
-      initial_candidates: candidates,
-    });
+    const { error } = await requestWithTimeout((signal) =>
+      getSupabase()
+        .rpc("initialize_trip_candidate_pool", {
+          target_trip: tripId,
+          initial_candidates: candidates,
+        })
+        .abortSignal(signal),
+    );
     if (error) throw error;
   },
   save: async (_userId, tripId, snapshot, next) => {
     const storedCandidates = next.candidates.map((candidate) =>
       poolCandidateBase(candidate, snapshot.otherVotes[candidate.id]),
     );
-    const { error } = await getSupabase().rpc("save_trip_candidate_pool", {
-      target_trip: tripId,
-      expected_revision: snapshot.revision,
-      next_candidates: storedCandidates,
-      next_draft: next.draft,
-      next_draft_excluded_existing: next.draftExcludedExisting ?? {},
-      next_published: next.published,
-      member_votes: next.votes,
-    });
+    const { error } = await requestWithTimeout((signal) =>
+      getSupabase()
+        .rpc("save_trip_candidate_content", {
+          target_trip: tripId,
+          expected_revision: snapshot.revision,
+          next_candidates: storedCandidates,
+          next_draft: next.draft,
+          next_draft_excluded_existing: next.draftExcludedExisting ?? {},
+          next_published: next.published,
+        })
+        .abortSignal(signal),
+    );
     if (error) throw error;
   },
 });
@@ -152,14 +156,17 @@ function Action({
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
-        s.action,
-        secondary && s.secondary,
-        disabled && { opacity: 0.45 },
-        pressed && { opacity: 0.75 },
-      ]}
+      accessibilityState={{ disabled }}
+      android_ripple={{ color: secondary ? "#EDE2FD" : "#6934BB" }}
+      style={[s.action, secondary && s.secondary, disabled && s.disabledButton]}
     >
-      <Text style={[s.actionText, secondary && { color: purple }]}>
+      <Text
+        style={[
+          s.actionText,
+          secondary && { color: purple },
+          disabled && s.disabledButtonText,
+        ]}
+      >
         {children}
       </Text>
     </Pressable>
@@ -246,47 +253,55 @@ function FullScreen({
     };
   }, []);
   return (
-    <Modal visible animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView
-        style={[
-          s.safe,
-          Platform.OS === "web" && {
-            height: viewportHeight ?? windowHeight,
-            flexGrow: 0,
-            flexShrink: 0,
-            flexBasis: "auto",
-          },
-        ]}
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={
-            Platform.OS === "ios"
-              ? "padding"
-              : Platform.OS === "android"
-                ? "height"
-                : undefined
-          }
+    <Modal
+      visible
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
+      <SafeAreaProvider style={{ flex: 1, backgroundColor: bg }}>
+        <SafeAreaView
+          edges={["top", "bottom", "left", "right"]}
+          style={[
+            s.safe,
+            Platform.OS === "web" && {
+              height: viewportHeight ?? windowHeight,
+              flexGrow: 0,
+              flexShrink: 0,
+              flexBasis: "auto",
+            },
+          ]}
         >
-          <View style={s.header}>
-            <IconButton label="Back" onPress={onClose}>
-              <ArrowLeft size={22} color={ink} />
-            </IconButton>
-            <Text style={s.heading}>{title}</Text>
-            <View style={{ width: 44, alignItems: "center" }}>{right}</View>
-          </View>
-          <ScrollView
+          <KeyboardAvoidingView
             style={{ flex: 1, minHeight: 0 }}
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ padding: 20, paddingBottom: 12 }}
+            behavior={
+              Platform.OS === "ios"
+                ? "padding"
+                : Platform.OS === "android"
+                  ? "height"
+                  : undefined
+            }
           >
-            {children}
-          </ScrollView>
-          {footer && <View style={s.footer}>{footer}</View>}
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+            <View style={s.header}>
+              <IconButton label="Back" onPress={onClose}>
+                <ArrowLeft size={22} color={ink} />
+              </IconButton>
+              <Text style={s.heading}>{title}</Text>
+              <View style={{ width: 44, alignItems: "center" }}>{right}</View>
+            </View>
+            <ScrollView
+              style={{ flex: 1, flexBasis: 0, minHeight: 0 }}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ padding: 20, paddingBottom: 12 }}
+            >
+              {children}
+            </ScrollView>
+            {footer && <View style={s.footer}>{footer}</View>}
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -298,8 +313,16 @@ export default function CandidatePool({
 }: {
   tripId: string;
   trip: Trip | null;
-  existingItems: { id: string; title: string; description: string | null; activity_category: string | null; location_name: string | null; start_time: string | null; position: number }[];
-  onPublished: () => void;
+  existingItems: {
+    id: string;
+    title: string;
+    description: string | null;
+    activity_category: string | null;
+    location_name: string | null;
+    start_time: string | null;
+    position: number;
+  }[];
+  onPublished: (result: PublicationResult) => void;
 }) {
   const { session } = useAuth();
   const userId = session?.user.id;
@@ -308,31 +331,66 @@ export default function CandidatePool({
     [ready, setReady] = useState(false),
     [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [syncError, setSyncError] = useState("");
   const current = useRef(pool);
   const [latestExistingItems, setLatestExistingItems] = useState(existingItems);
 
   const [screen, setScreen] = useState<"pool" | "add" | "review">("pool");
   const [filter, setFilter] = useState("All"),
     [detail, setDetail] = useState<Candidate | null>(null);
+  const publishingRef = useRef(false);
   const [publishing, setPublishing] = useState(false),
     [edit, setEdit] = useState<Stop | null>(null),
     [editError, setEditError] = useState("");
   const [generatingCandidates, setGeneratingCandidates] = useState(false);
-  const draftableCount = pool.candidates.filter((candidate) => candidate.confirmed).length;
+  const generatingRef = useRef(false);
+  const generationContext = useRef("");
+  generationContext.current =
+    (userId ?? "") + ":" + tripId + ":" + (trip?.destination ?? "");
+  useEffect(
+    () => () => {
+      generationContext.current = "";
+    },
+    [],
+  );
+  const autoSeedAttempts = useRef(new Set<string>());
+  const draftableCount = pool.candidates.filter(
+    (candidate) => candidate.confirmed,
+  ).length;
   const hasTripDates = !!trip?.start_date && !!trip.end_date;
-  const existingMaxDay = Math.max(1, ...latestExistingItems.map((item) => {
-    if (trip?.start_date && item.start_time) return Math.max(1, Math.floor((Date.parse(item.start_time) - Date.parse(`${trip.start_date}T00:00:00Z`)) / 86400000) + 1);
-    const match = item.description?.match(/Day\s*(\d+)/i);
-    return match ? Number(match[1]) : 1;
-  }));
-  const days = hasTripDates ? Math.max(tripDays(trip?.start_date, trip?.end_date), existingMaxDay) : Math.max(existingMaxDay, 1, Math.ceil((draftableCount + latestExistingItems.length) / 4));
+  const existingMaxDay = Math.max(
+    1,
+    ...latestExistingItems.map((item) => {
+      if (trip?.start_date && item.start_time)
+        return Math.max(
+          1,
+          Math.floor(
+            (Date.parse(item.start_time) -
+              Date.parse(`${trip.start_date}T00:00:00Z`)) /
+              86400000,
+          ) + 1,
+        );
+      const match = item.description?.match(/Day\s*(\d+)/i);
+      return match ? Number(match[1]) : 1;
+    }),
+  );
+  const days = hasTripDates
+    ? Math.max(tripDays(trip?.start_date, trip?.end_date), existingMaxDay)
+    : Math.max(
+        existingMaxDay,
+        1,
+        Math.ceil((draftableCount + latestExistingItems.length) / 4),
+      );
   const includedDraftCount = Math.min(draftableCount, days * 4);
-  const reviewDraftCount = pool.draft?.length ?? makeReviewDraft(pool, days, latestExistingItems, trip?.start_date).length;
+  const reviewDraftCount =
+    pool.draft?.length ??
+    makeReviewDraft(pool, days, latestExistingItems, trip?.start_date).length;
   useEffect(() => setLatestExistingItems(existingItems), [existingItems]);
   useEffect(() => {
     let alive = true;
     setReady(false);
     setError("");
+    setSyncError("");
     setScreen("pool");
     if (!userId || !trip) return;
     void poolStore
@@ -356,23 +414,80 @@ export default function CandidatePool({
   useEffect(() => {
     if (!ready || !userId) return;
     let active = true;
+    let refreshing = false;
+    let queued = false;
+    let retryAfter = 0;
+    let failures = 0;
     const refresh = () => {
-      void poolStore.load(userId, tripId, () => fresh(trip?.destination || ""))
+      if (Date.now() < retryAfter) return;
+      if (!active || publishingRef.current) return;
+      if (refreshing) {
+        queued = true;
+        return;
+      }
+      refreshing = true;
+      void poolStore
+        .load(userId, tripId, () => fresh(trip?.destination || ""))
         .then((latest) => {
-          if (!active) return;
+          if (!active || publishingRef.current) return;
           current.current = latest;
           setPool(latest);
+          failures = 0;
+          retryAfter = 0;
+          setSyncError("");
         })
         .catch((cause) => {
-          if (active) setError("Could not sync group votes. " + errorMessage(cause));
+          if (active) {
+            failures++;
+            retryAfter =
+              Date.now() + Math.min(60000, 10000 * 2 ** (failures - 1));
+            setSyncError(
+              "Could not sync group votes. Retrying automatically. " +
+                errorMessage(cause),
+            );
+          }
+        })
+        .finally(() => {
+          refreshing = false;
+          if (queued && active) {
+            queued = false;
+            refresh();
+          }
         });
     };
-    const channel = getSupabase().channel(`candidate-pool:${tripId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "trip_candidate_pools", filter: `trip_id=eq.${tripId}` }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "trip_candidate_votes", filter: `trip_id=eq.${tripId}` }, refresh)
-      .subscribe();
+    const channel = getSupabase()
+      .channel(`candidate-pool:${tripId}:${userId}:${randomUUID()}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trip_candidate_pools",
+          filter: `trip_id=eq.${tripId}`,
+        },
+        refresh,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trip_candidate_votes",
+          filter: `trip_id=eq.${tripId}`,
+        },
+        refresh,
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") refresh();
+      });
+    const interval = setInterval(refresh, 10000);
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
     return () => {
       active = false;
+      clearInterval(interval);
+      appState.remove();
       void getSupabase().removeChannel(channel);
     };
   }, [ready, userId, tripId, trip?.destination]);
@@ -389,156 +504,306 @@ export default function CandidatePool({
       return false;
     }
   }
-  const vote = (id: string, value: Vote) =>
-    update((p) => ({ ...p, votes: toggleVote(p.votes, id, value), draft: null }));
+  async function vote(id: string, value: Vote) {
+    if (!userId || !ready) return;
+    try {
+      const next = await poolStore.vote(userId, tripId, id, value);
+      current.current = next;
+      setPool(next);
+      setError("");
+    } catch (cause) {
+      setError("Your vote was not saved. Please retry. " + errorMessage(cause));
+    }
+  }
   const toggleDraftSelection = (id: string) =>
-    update((p) => ({
-      ...p,
-      candidates: p.candidates.map((candidate) => candidate.id === id ? { ...candidate, confirmed: !candidate.confirmed } : candidate),
-      draft: null,
-    }));
+    update((p) =>
+      setCandidateDraftSelection(
+        p,
+        id,
+        !p.candidates.find((candidate) => candidate.id === id)?.confirmed,
+        latestExistingItems,
+      ),
+    );
   async function generateCandidates() {
-    if (generatingCandidates || !ready || !trip?.destination?.trim()) return;
+    if (generatingRef.current || !ready || !trip?.destination?.trim()) return;
+    generatingRef.current = true;
+    const requestedContext = generationContext.current;
     setGeneratingCandidates(true);
     setError("");
     setNotice("");
     try {
-      const { data, error: failure } = await getSupabase().functions.invoke("generate-candidates", {
-        body: {
-          destination: trip.destination,
-          count: 6,
-          existingPlaces: [
-            ...pool.candidates.map(({ name, location }) => ({ name, location })),
-            ...latestExistingItems.map((item) => ({ name: item.title, location: item.location_name || "" })),
-          ],
+      const { data, error: failure } = await getSupabase().functions.invoke(
+        "generate-candidates",
+        {
+          timeout: 45000,
+          body: {
+            tripId,
+            destination: trip.destination,
+            count: 6,
+            existingPlaces: [
+              ...pool.candidates.map(({ name, location }) => ({
+                name,
+                location,
+              })),
+              ...latestExistingItems.map((item) => ({
+                name: item.title,
+                location: item.location_name || "",
+              })),
+            ],
+          },
         },
-      });
-      if (failure) throw failure;
-      if (!Array.isArray(data?.candidates)) throw Error("The AI returned an invalid candidate list.");
+      );
+      if (generationContext.current !== requestedContext) return;
+      if (failure) {
+        let message = failure.message;
+        try {
+          const detail = await failure.context?.json();
+          if (detail?.error) message = String(detail.error);
+        } catch {}
+        throw Error(message);
+      }
+      if (!Array.isArray(data?.candidates))
+        throw Error("The AI returned an invalid candidate list.");
       const existing = new Set([
         ...pool.candidates.map((candidate) => normalizePlace(candidate.name)),
         ...latestExistingItems.map((place) => normalizePlace(place.title)),
       ]);
-      const cover = /japan|tokyo|osaka|kyoto/i.test(trip.destination) ? "japan" : /bali|indonesia/i.test(trip.destination) ? "bali" : "generic";
-      const generated: Candidate[] = data.candidates.flatMap((candidate: unknown, index: number) => {
-        if (!candidate || typeof candidate !== "object") return [];
-        const value = candidate as { name?: unknown; location?: unknown; tags?: unknown };
-        if (typeof value.name !== "string" || typeof value.location !== "string") return [];
-        const key = normalizePlace(value.name);
-        if (!value.name.trim() || !value.location.trim() || existing.has(key)) return [];
-        existing.add(key);
-        return [{
-          id: `ai-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-          name: value.name.trim().slice(0, 120),
-          location: value.location.trim().slice(0, 120),
-          tags: Array.isArray(value.tags) ? [...new Set(value.tags.filter((tag: unknown): tag is string => typeof tag === "string" && tags.includes(tag as typeof tags[number])))].slice(0, 3) : [],
-          cover,
-          up: 0,
-          down: 0,
-          ai: true,
-        } as Candidate];
-      });
+      const cover = /japan|tokyo|osaka|kyoto/i.test(trip.destination)
+        ? "japan"
+        : /bali|indonesia/i.test(trip.destination)
+          ? "bali"
+          : "generic";
+      const generated: Candidate[] = data.candidates.flatMap(
+        (candidate: unknown, index: number) => {
+          if (!candidate || typeof candidate !== "object") return [];
+          const value = candidate as {
+            name?: unknown;
+            location?: unknown;
+            tags?: unknown;
+          };
+          if (
+            typeof value.name !== "string" ||
+            typeof value.location !== "string"
+          )
+            return [];
+          const key = normalizePlace(value.name);
+          if (!value.name.trim() || !value.location.trim() || existing.has(key))
+            return [];
+          existing.add(key);
+          return [
+            {
+              id: `ai-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+              name: value.name.trim().slice(0, 120),
+              location: value.location.trim().slice(0, 120),
+              tags: Array.isArray(value.tags)
+                ? [
+                    ...new Set(
+                      value.tags.filter(
+                        (tag: unknown): tag is string =>
+                          typeof tag === "string" &&
+                          tags.includes(tag as (typeof tags)[number]),
+                      ),
+                    ),
+                  ].slice(0, 3)
+                : [],
+              cover,
+              up: 0,
+              down: 0,
+              ai: true,
+            } as Candidate,
+          ];
+        },
+      );
       if (!generated.length) {
-        setNotice("No new places this time. Your candidates and votes are unchanged.");
+        setNotice(
+          "No new places this time. Your candidates and votes are unchanged.",
+        );
         return;
       }
-      if (!(await update((current) => ({ ...current, candidates: [...generated, ...current.candidates], draft: null })))) {
+      if (
+        !(await update((current) => ({
+          ...current,
+          candidates: [
+            ...generated.filter(
+              (c) =>
+                !current.candidates.some(
+                  (existing) =>
+                    normalizePlace(existing.name) === normalizePlace(c.name),
+                ),
+            ),
+            ...current.candidates,
+          ],
+          draft: null,
+        })))
+      ) {
         throw Error("The suggestions could not be saved. Please retry.");
       }
-      setNotice(`${generated.length} new ${generated.length === 1 ? "idea" : "ideas"} added. Your existing candidates and votes are unchanged.`);
+      setNotice(
+        `${generated.length} new ${generated.length === 1 ? "idea" : "ideas"} added. Your existing candidates and votes are unchanged.`,
+      );
+      const coverage = data.preferenceCoverage;
+      if (
+        coverage &&
+        Number.isInteger(coverage.membersTotal) &&
+        Number.isInteger(coverage.membersWithPreferences)
+      ) {
+        setNotice(
+          (previous) =>
+            previous +
+            (coverage.membersWithPreferences > 0
+              ? " Ideas use saved preferences from " +
+                coverage.membersWithPreferences +
+                " of " +
+                coverage.membersTotal +
+                " group members."
+              : " No members have saved preferences yet; these ideas use a varied destination mix."),
+        );
+      }
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (generationContext.current === requestedContext)
+        setError(errorMessage(cause));
     } finally {
+      generatingRef.current = false;
       setGeneratingCandidates(false);
     }
   }
-  const counts = {
-    All: pool.candidates.length,
-    "In Draft": pool.candidates.filter((candidate) => candidate.confirmed).length,
-    Voted: Object.keys(pool.votes).length,
-    Unvoted: pool.candidates.filter((candidate) => !pool.votes[candidate.id]).length,
-  };
+  useEffect(() => {
+    if (
+      generatingRef.current ||
+      !ready ||
+      pool.candidates.length ||
+      !trip?.destination?.trim() ||
+      !userId
+    )
+      return;
+    const key = userId + ":" + tripId + ":" + trip.destination;
+    if (autoSeedAttempts.current.has(key)) return;
+    autoSeedAttempts.current.add(key);
+    void generateCandidates();
+  }, [
+    ready,
+    tripId,
+    userId,
+    trip?.destination,
+    pool.candidates.length,
+    generatingCandidates,
+  ]);
+  const counts = candidateFilterCounts(pool);
   const visible = pool.candidates
-    .filter(
-      (c) =>
-        filter === "All" ||
-        (filter === "In Draft"
-          ? c.confirmed
-          : filter === "Unvoted"
-            ? !pool.votes[c.id]
-            : !!pool.votes[c.id]),
+    .filter((c) => candidateMatchesFilter(pool, c, filter))
+    .sort(
+      (a, b) =>
+        totals(b, pool.votes[b.id]).score - totals(a, pool.votes[a.id]).score ||
+        a.name.localeCompare(b.name),
     );
   async function review() {
-    const { data, error: loadError } = await getSupabase().from("itinerary_items")
-      .select("id,title,description,activity_category,location_name,start_time,position")
-      .eq("trip_id", tripId).order("position", { ascending: true });
-    if (loadError) { setError("Could not load the latest itinerary for review. " + errorMessage(loadError)); return; }
+    const { data, error: loadError } = await getSupabase()
+      .from("itinerary_items")
+      .select(
+        "id,title,description,activity_category,location_name,start_time,position",
+      )
+      .eq("trip_id", tripId)
+      .order("position", { ascending: true });
+    if (loadError) {
+      setError(
+        "Could not load the latest itinerary for review. " +
+          errorMessage(loadError),
+      );
+      return;
+    }
     const items = (data ?? []) as typeof existingItems;
     setLatestExistingItems(items);
     const currentDays = getReviewDayCount(items, trip, pool.candidates);
-    const { draft } = synchronizeReviewDraft(pool, currentDays, items, trip?.start_date);
+    const { draft } = synchronizeReviewDraft(
+      pool,
+      currentDays,
+      items,
+      trip?.start_date,
+    );
     if (!draft?.length) {
       setError("Add at least one place to your draft before reviewing it.");
       return;
     }
-    if (!(await update((p) => synchronizeReviewDraft(p, currentDays, items, trip?.start_date)))) return;
+    if (
+      !(await update((p) =>
+        synchronizeReviewDraft(p, currentDays, items, trip?.start_date),
+      ))
+    )
+      return;
     setError("");
     setScreen("review");
   }
   async function publish() {
-    if (!pool.draft?.length || publishing) return;
+    if (trip?.owner_id !== userId) {
+      setError("Only the Group Leader can publish the draft.");
+      return;
+    }
+    if (!pool.draft?.length || publishingRef.current) return;
+    if (!pool.revision) {
+      setError("Reload and review the shared draft before publishing.");
+      return;
+    }
+    publishingRef.current = true;
     setPublishing(true);
     setError("");
+    const reviewed = pool;
     try {
-      const { data: latestRows, error: itineraryError } = await getSupabase().from("itinerary_items")
-        .select("id,title,description,activity_category,location_name,start_time,position")
-        .eq("trip_id", tripId).order("position", { ascending: true });
-      if (itineraryError) throw itineraryError;
-      const currentItems = (latestRows ?? []) as typeof existingItems;
-      setLatestExistingItems(currentItems);
-      const currentDays = getReviewDayCount(currentItems, trip, pool.candidates);
-      const currentReview = synchronizeReviewDraft(pool, currentDays, currentItems, trip?.start_date);
-      if (stableDraft(currentReview.draft) !== stableDraft(pool.draft)) {
-        if (!(await update((current) => synchronizeReviewDraft(current, currentDays, currentItems, trip?.start_date)))) return;
-        setError("Your Full Itinerary changed while this draft was open. Review the updated plan, then publish again.");
-        return;
-      }
-      const { error: failure } = await getSupabase().rpc(
-        "publish_candidate_draft",
-        {
-          target_trip: tripId,
-          stops: pool.draft.map((stop, position) => ({
-            existing_id: stop.existingId || null,
-            existing_snapshot: stop.existingSnapshot ? JSON.parse(stop.existingSnapshot) : null,
-            expected_existing_ids: currentItems.map((item) => item.id),
-            title: stop.title,
-            location_name: stop.location,
-            description: stop.description ?? `Day ${stop.day} · ${stop.time}`,
-            activity_category: stop.activityCategory ?? null,
-            start_time: trip?.start_date
-              ? new Date(
-                  Date.parse(`${trip.start_date}T00:00:00Z`) +
-                    (stop.day - 1) * 86400000 +
-                    Number(stop.time.slice(0, 2)) * 3600000 +
-                    Number(stop.time.slice(3)) * 60000,
-                ).toISOString()
-              : null,
-            position,
-          })),
-        },
+      const { data, error: failure } = await requestWithTimeout((signal) =>
+        getSupabase()
+          .rpc("publish_shared_candidate_plan", {
+            target_trip: tripId,
+            reviewed_draft: reviewed.draft,
+            stops: reviewed.draft!.map((stop, position) => ({
+              existing_id: stop.existingId || null,
+              existing_snapshot: stop.existingSnapshot
+                ? JSON.parse(stop.existingSnapshot)
+                : null,
+              expected_existing_ids: latestExistingItems.map((item) => item.id),
+              title: stop.title,
+              location_name: stop.location,
+              description:
+                stop.description ?? "Day " + stop.day + " \u00b7 " + stop.time,
+              activity_category: stop.activityCategory ?? "sightseeing",
+              start_time: trip?.start_date
+                ? new Date(
+                    Date.parse(trip.start_date + "T00:00:00Z") +
+                      (stop.day - 1) * 86400000 +
+                      Number(stop.time.slice(0, 2)) * 3600000 +
+                      Number(stop.time.slice(3)) * 60000,
+                  ).toISOString()
+                : null,
+              position,
+            })),
+          })
+          .abortSignal(signal),
       );
       if (failure) throw failure;
-      if (!(await update((p) => ({ ...p, published: p.draft, draft: null, draftExcludedExisting: {} }))))
-        throw Error(
-          "The itinerary was published, but the saved draft status could not be updated. Please retry.",
-        );
+      const result = readPublicationResult(data);
+      const next: Pool = {
+        ...reviewed,
+        revision: result.revision,
+        published: reviewed.draft,
+        draft: null,
+        draftExcludedExisting: {},
+      };
+      current.current = next;
+      setPool(next);
+      setNotice("Your plan has been published.");
       setScreen("pool");
-      onPublished();
-    } catch (e) {
+      onPublished(result);
+    } catch (cause) {
+      const message = errorMessage(cause);
       setError(
-        `Plan not published. ${e instanceof Error ? e.message : (e as { message?: string })?.message || "Please try again."}`,
+        cause instanceof RequestTimeoutError
+          ? "Publication could not be confirmed before the timeout. Reopen the itinerary to check whether it was saved before retrying."
+          : message.includes("publish_shared_candidate_plan") &&
+              (message.includes("schema cache") ||
+                message.includes("Could not find"))
+            ? "Apply migration 015_publish_itinerary_result.sql in Supabase after 014, then retry publishing."
+            : "Plan not published. " + message,
       );
     } finally {
+      publishingRef.current = false;
       setPublishing(false);
     }
   }
@@ -601,30 +866,83 @@ export default function CandidatePool({
           >
             Candidate Pool
           </Text>
+          <Text
+            accessibilityLabel={
+              trip?.owner_id === userId
+                ? "Your role: Group Leader"
+                : "Your role: Member"
+            }
+            style={{
+              alignSelf: "flex-start",
+              color: purple,
+              backgroundColor: "#EEE4FA",
+              borderRadius: 12,
+              paddingHorizontal: 9,
+              paddingVertical: 4,
+              fontFamily: "Inter",
+              fontSize: 10,
+              fontWeight: "700",
+              marginTop: 6,
+            }}
+          >
+            {trip?.owner_id === userId ? "Group Leader" : "Member"}
+          </Text>
           <Text style={{ fontSize: 11, color: muted, marginTop: 3 }}>
-            Vote on places; use the menu to add favorites to your draft.
+            Vote on places; changes are shared with your travel group.
           </Text>
         </View>
       </View>
       <View style={[s.row, { gap: 8, marginBottom: 12 }]}>
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ disabled: generatingCandidates || !trip?.destination }}
+          accessibilityState={{
+            disabled: generatingCandidates || !trip?.destination,
+          }}
           disabled={generatingCandidates || !trip?.destination}
           onPress={() => void generateCandidates()}
-          style={[s.pill, s.row, { flex: 1, minHeight: 38, justifyContent: "center", gap: 6, backgroundColor: "#F1E8FC", opacity: generatingCandidates ? 0.65 : 1 }]}
+          style={[
+            s.pill,
+            s.row,
+            {
+              flex: 1,
+              minHeight: 38,
+              justifyContent: "center",
+              gap: 6,
+              backgroundColor: "#F1E8FC",
+              opacity: generatingCandidates ? 0.65 : 1,
+            },
+          ]}
         >
-          {generatingCandidates ? <ActivityIndicator size="small" color={purple} /> : <Sparkles size={15} color={purple} />}
-          <Text numberOfLines={1} style={{ color: purple, fontSize: 10, fontWeight: "700" }}>{generatingCandidates ? "Finding places..." : pool.candidates.length ? "Get more AI ideas" : "Suggest places with AI"}</Text>
+          {generatingCandidates ? (
+            <ActivityIndicator size="small" color={purple} />
+          ) : (
+            <Sparkles size={15} color={purple} />
+          )}
+          <Text
+            numberOfLines={1}
+            style={{ color: purple, fontSize: 10, fontWeight: "700" }}
+          >
+            {generatingCandidates
+              ? "Finding places..."
+              : pool.candidates.length
+                ? "Get more AI ideas"
+                : "Suggest places with AI"}
+          </Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Add a candidate manually"
           onPress={() => setScreen("add")}
-          style={[s.pill, s.row, { minHeight: 38, gap: 4, backgroundColor: "white" }]}
+          style={[
+            s.pill,
+            s.row,
+            { minHeight: 38, gap: 4, backgroundColor: "white" },
+          ]}
         >
           <Plus size={14} color={purple} />
-          <Text style={{ color: purple, fontSize: 10, fontWeight: "700" }}>Add place</Text>
+          <Text style={{ color: purple, fontSize: 10, fontWeight: "700" }}>
+            Add place
+          </Text>
         </Pressable>
       </View>
       <View style={[s.row, { gap: 5, marginBottom: 14 }]}>
@@ -634,19 +952,37 @@ export default function CandidatePool({
             accessibilityState={{ selected: f === filter }}
             key={f}
             onPress={() => setFilter(f)}
-            style={[s.pill, f === filter && { backgroundColor: purple, borderColor: purple }]}
+            style={[
+              s.pill,
+              f === filter && { backgroundColor: purple, borderColor: purple },
+            ]}
           >
-            <Text style={{ fontFamily: "Inter", fontSize: 10, color: f === filter ? "white" : muted }}>
+            <Text
+              style={{
+                fontFamily: "Inter",
+                fontSize: 10,
+                color: f === filter ? "white" : muted,
+              }}
+            >
               {f} ({counts[f]})
             </Text>
           </Pressable>
         ))}
       </View>
-      {!!notice && <Text style={{ color: "#43826D", fontSize: 10, marginBottom: 9 }}>{notice}</Text>}
-      <Text style={{ color: muted, fontSize: 9, marginTop: -6, marginBottom: 10 }}>AI suggestions are unverified and are never added directly to your draft.</Text>
-      {!!error && (
+      {!!notice && (
+        <Text style={{ color: "#43826D", fontSize: 10, marginBottom: 9 }}>
+          {notice}
+        </Text>
+      )}
+      <Text
+        style={{ color: muted, fontSize: 9, marginTop: -6, marginBottom: 10 }}
+      >
+        AI suggestions are unverified and are never added directly to your
+        draft.
+      </Text>
+      {!!(error || syncError) && (
         <Text accessibilityRole="alert" style={s.error}>
-          {error}
+          {error || syncError}
         </Text>
       )}
       <View
@@ -662,8 +998,43 @@ export default function CandidatePool({
           return (
             <View key={c.id} style={s.candidate}>
               <View style={{ height: 74 }}>
-                {c.image ? <Image source={{ uri: c.image }} style={{ width: "100%", height: "100%" }} /> : c.cover === "generic" ? <View style={{ width: "100%", height: "100%", backgroundColor: "#F1E8FC", alignItems: "center", justifyContent: "center" }}><MapPin size={25} color={purple} /></View> : <Image source={c.cover === "japan" ? japan : bali} style={{ width: "100%", height: "100%" }} />}
-                {(c.confirmed || c.ai) && <Text style={[s.badge, c.ai && !c.confirmed && { backgroundColor: "#F1E8FC", color: purple }]}>{c.confirmed ? "✓ In draft" : "AI idea"}</Text>}
+                {c.image ? (
+                  <Image
+                    source={{ uri: c.image }}
+                    style={{ width: "100%", height: "100%" }}
+                  />
+                ) : c.cover === "generic" ? (
+                  <View
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      backgroundColor: "#F1E8FC",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <MapPin size={25} color={purple} />
+                  </View>
+                ) : (
+                  <Image
+                    source={c.cover === "japan" ? japan : bali}
+                    style={{ width: "100%", height: "100%" }}
+                  />
+                )}
+                {(c.confirmed || c.ai) && (
+                  <Text
+                    style={[
+                      s.badge,
+                      c.ai &&
+                        !c.confirmed && {
+                          backgroundColor: "#F1E8FC",
+                          color: purple,
+                        },
+                    ]}
+                  >
+                    {c.confirmed ? "✓ In draft" : "AI idea"}
+                  </Text>
+                )}
                 <Pressable
                   accessibilityLabel={`Details for ${c.name}`}
                   accessibilityRole="button"
@@ -676,9 +1047,18 @@ export default function CandidatePool({
               <View style={{ padding: 8, gap: 5 }}>
                 <Text
                   numberOfLines={2}
-                style={{ height: 28, lineHeight: 14, fontSize: 11, fontWeight: "700", color: ink }}
+                  style={{
+                    height: 28,
+                    lineHeight: 14,
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: ink,
+                  }}
                 >
                   {c.name}
+                </Text>
+                <Text style={{ fontSize: 9, color: purple }}>
+                  Preference score: {t.score.toFixed(2)}
                 </Text>
                 <View style={[s.row, { height: 12, gap: 3 }]}>
                   <MapPin size={9} color={muted} />
@@ -689,14 +1069,31 @@ export default function CandidatePool({
                     {c.location}
                   </Text>
                 </View>
-                <View style={[s.row, { height: 25, alignContent: "flex-start", gap: 3, flexWrap: "wrap" }]}>
+                <View
+                  style={[
+                    s.row,
+                    {
+                      height: 25,
+                      alignContent: "flex-start",
+                      gap: 3,
+                      flexWrap: "wrap",
+                    },
+                  ]}
+                >
                   {c.tags.map((tag) => (
                     <Text key={tag} style={s.tag}>
                       {tag}
                     </Text>
                   ))}
                 </View>
-                <Text style={{ height: 12, lineHeight: 12, fontSize: 9, color: muted }}>
+                <Text
+                  style={{
+                    height: 12,
+                    lineHeight: 12,
+                    fontSize: 9,
+                    color: muted,
+                  }}
+                >
                   {t.total} {t.total === 1 ? "vote" : "votes"}
                 </Text>
                 <View
@@ -778,14 +1175,18 @@ export default function CandidatePool({
             Almost there!
           </Text>
           <Text style={[s.small, { fontSize: 10, marginTop: 3 }]}>
-            Votes help compare places. Add the ones you want to plan to your draft.
+            Votes help compare places. Add the ones you want to plan to your
+            draft.
           </Text>
         </View>
         <Pressable
           accessibilityRole="button"
           disabled={!draftableCount && !latestExistingItems.length}
           onPress={() => void review()}
-          style={[s.result, !draftableCount && !latestExistingItems.length && { opacity: 0.4 }]}
+          style={[
+            s.result,
+            !draftableCount && !latestExistingItems.length && { opacity: 0.4 },
+          ]}
         >
           <Text style={{ color: "white", fontSize: 10, fontWeight: "700" }}>
             Review Draft ({reviewDraftCount})
@@ -799,7 +1200,8 @@ export default function CandidatePool({
           { fontSize: 10, textAlign: "center", marginVertical: 10 },
         ]}
       >
-        Your existing itinerary stays in the draft. Add selected places, then edit or reorder everything before publishing.
+        Your existing itinerary stays in the draft. Add selected places, then
+        edit or reorder everything before publishing.
       </Text>
       {screen === "add" && (
         <AddCandidate
@@ -831,7 +1233,7 @@ export default function CandidatePool({
             <>
               <Text style={[s.small, { textAlign: "center", marginBottom: 8 }]}>
                 {trip?.owner_id !== session?.user.id
-                  ? "Only the trip organiser can publish."
+                  ? "Only the Group Leader can publish. Everyone can view and edit this shared draft."
                   : "Your current itinerary and selected places are included in this reviewed plan."}
               </Text>
               <Action
@@ -870,12 +1272,15 @@ export default function CandidatePool({
                 Here is your updated plan!
               </Text>
               <Text style={[s.small, { fontSize: 10, marginTop: 4 }]}>
-                Your current itinerary and selected places are combined here. Tap an activity to edit or use its
-                handle to reorder before finalizing.
+                Your current itinerary and selected places are combined here.
+                Tap an activity to edit or use its handle to reorder before
+                finalizing.
               </Text>
             </View>
           </View>
-          {!!error && <Text style={s.error}>{error}</Text>}
+          {!!(error || syncError) && (
+            <Text style={s.error}>{error || syncError}</Text>
+          )}
           {Array.from({ length: days }, (_, i) => i + 1).map((day) => (
             <View
               key={day}
@@ -965,10 +1370,24 @@ export default function CandidatePool({
               </Pressable>
             </View>
           ))}
-          {hasTripDates && draftableCount > days * 4 && <Text style={[s.small, { color: "#9A6A21", marginBottom: 10 }]}>Showing the top {days * 4} selected places for this trip length. Other selected places remain in your pool.</Text>}
+          {hasTripDates && draftableCount > days * 4 && (
+            <Text style={[s.small, { color: "#9A6A21", marginBottom: 10 }]}>
+              Showing the top {days * 4} selected places for this trip length.
+              Other selected places remain in your pool.
+            </Text>
+          )}
           <Action
             secondary
-            onPress={() => update((p) => ({ ...synchronizeReviewDraft({ ...p, draftExcludedExisting: {} }, days, latestExistingItems, trip?.start_date) }))}
+            onPress={() =>
+              update((p) => ({
+                ...synchronizeReviewDraft(
+                  { ...p, draft: null, draftExcludedExisting: {} },
+                  days,
+                  latestExistingItems,
+                  trip?.start_date,
+                ),
+              }))
+            }
           >
             Rebuild draft from itinerary and selected places
           </Action>
@@ -1045,18 +1464,9 @@ export default function CandidatePool({
                   <Action
                     secondary
                     onPress={() => {
-                    update((p) => {
-                      const draftExcludedExisting = { ...(p.draftExcludedExisting ?? {}) };
-                      if (edit.existingId) {
-                        const item = latestExistingItems.find((entry) => entry.id === edit.existingId);
-                        if (item) draftExcludedExisting[item.id] = existingItemSnapshot(item);
-                      }
-                      return {
-                        ...p,
-                        draftExcludedExisting,
-                        draft: p.draft?.filter((x) => x.id !== edit.id) || [],
-                      };
-                    });
+                      void update((p) =>
+                        removeReviewStop(p, edit, latestExistingItems),
+                      );
                       setEdit(null);
                     }}
                   >
@@ -1119,21 +1529,24 @@ export default function CandidatePool({
                   setDetail(null);
                 }}
               >
-                {detail.confirmed
-                  ? "Remove from draft"
-                  : "Add to draft"}
+                {detail.confirmed ? "Remove from draft" : "Add to draft"}
               </Action>
               <Action
                 secondary
                 onPress={() => {
                   update((p) => {
-                    const votes = { ...p.votes };
+                    const next = setCandidateDraftSelection(
+                      p,
+                      detail.id,
+                      false,
+                      latestExistingItems,
+                    );
+                    const votes = { ...next.votes };
                     delete votes[detail.id];
                     return {
-                      ...p,
-                      draft: null,
+                      ...next,
                       votes,
-                      candidates: p.candidates.filter(
+                      candidates: next.candidates.filter(
                         (c) => c.id !== detail.id,
                       ),
                     };
@@ -1182,9 +1595,16 @@ function DraftRow({
               e.nativeEvent.pageY - (dragY.current ?? e.nativeEvent.pageY);
             if (Math.abs(delta) > 25) {
               const distance = Math.max(1, Math.round(Math.abs(delta) / 82));
-              onMove(Math.max(0, Math.min(maxIndex, index + (delta > 0 ? distance : -distance))));
-            }
-            else setControls(!controls);
+              onMove(
+                Math.max(
+                  0,
+                  Math.min(
+                    maxIndex,
+                    index + (delta > 0 ? distance : -distance),
+                  ),
+                ),
+              );
+            } else setControls(!controls);
             dragY.current = null;
           }}
           accessibilityRole="button"
@@ -1280,7 +1700,10 @@ function DraftRow({
             onPress={() => onMove(index - 1)}
             style={[s.pill, { opacity: first ? 0.4 : 1 }]}
           >
-            <View style={[s.row, { gap: 4 }]}><ArrowUp size={13} color={purple} /><Text style={{ color: purple }}>Move up</Text></View>
+            <View style={[s.row, { gap: 4 }]}>
+              <ArrowUp size={13} color={purple} />
+              <Text style={{ color: purple }}>Move up</Text>
+            </View>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -1288,7 +1711,10 @@ function DraftRow({
             onPress={() => onMove(index + 1)}
             style={[s.pill, { opacity: last ? 0.4 : 1 }]}
           >
-            <View style={[s.row, { gap: 4 }]}><ArrowDown size={13} color={purple} /><Text style={{ color: purple }}>Move down</Text></View>
+            <View style={[s.row, { gap: 4 }]}>
+              <ArrowDown size={13} color={purple} />
+              <Text style={{ color: purple }}>Move down</Text>
+            </View>
           </Pressable>
         </View>
       )}
@@ -1334,11 +1760,20 @@ function AddCandidate({
     try {
       const { data, error: failure } = await getSupabase().functions.invoke(
         "candidate-autofill",
-        { body, timeout: 30000 },
+        { body, timeout: 45000 },
       );
-      if (failure) throw failure;
+      if (failure) {
+        let message = failure.message;
+        try {
+          const detail = await failure.context?.json();
+          if (detail?.error) message = String(detail.error);
+        } catch {}
+        throw Error(message);
+      }
       if (!data?.name || !data?.location)
         throw Error("No place identified. Please enter the details manually.");
+      if (body.url && typeof data.resolvedUrl === "string")
+        setSource(data.resolvedUrl);
       setName(String(data.name).slice(0, 120));
       setLocation(String(data.location).slice(0, 120));
       setSelected(
@@ -1353,10 +1788,8 @@ function AddCandidate({
           : [],
       );
       setLinkOpen(false);
-    } catch {
-      setError(
-        "AI auto-fill is unavailable. Your photo/link is attached; enter the place details below.",
-      );
+    } catch (cause) {
+      setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -1414,7 +1847,11 @@ function AddCandidate({
         tags: selected,
         image: photo,
         source: source || undefined,
-        cover: /japan|tokyo|osaka|kyoto/i.test(destination) ? "japan" : /bali|indonesia/i.test(destination) ? "bali" : "generic",
+        cover: /japan|tokyo|osaka|kyoto/i.test(destination)
+          ? "japan"
+          : /bali|indonesia/i.test(destination)
+            ? "bali"
+            : "generic",
         up: 0,
         down: 0,
       });
@@ -1451,13 +1888,11 @@ function AddCandidate({
             accessibilityState={{ disabled: busy, busy }}
             disabled={busy}
             onPress={() => void submit()}
-            style={({ pressed }) => [
-              s.submitButton,
-              pressed && { backgroundColor: "#6934BB" },
-            ]}
+            android_ripple={{ color: "#6934BB" }}
+            style={[s.submitButton, busy && s.disabledButton]}
           >
             {busy && <ActivityIndicator color="#FFFFFF" size="small" />}
-            <Text style={s.submitButtonText}>
+            <Text style={[s.submitButtonText, busy && s.disabledButtonText]}>
               {busy ? "Please wait..." : "Submit for Voting"}
             </Text>
           </Pressable>
@@ -1470,7 +1905,9 @@ function AddCandidate({
             <Box size={25} color={purple} />
           </View>
           <View style={[s.row, { gap: 6, marginTop: 10 }]}>
-            <Text style={{ color: "#6339AD", fontSize: 16, fontWeight: "700" }}>Auto-fill with AI</Text>
+            <Text style={{ color: "#6339AD", fontSize: 16, fontWeight: "700" }}>
+              Auto-fill with AI
+            </Text>
             <Sparkles size={16} color="#6339AD" />
           </View>
           <Text
@@ -1484,8 +1921,9 @@ function AddCandidate({
               },
             ]}
           >
-            Upload a photo or paste a link (TikTok, IG, Maps) and we'll extract
-            the details!
+            Upload a photo or paste a public TikTok, Instagram or Maps link.
+            We'll resolve short links and read available captions. Private or
+            blocked posts need manual details.
           </Text>
           <View style={[s.row, { gap: 12, marginTop: 18, width: "100%" }]}>
             <Pressable
@@ -1647,109 +2085,58 @@ function AddCandidate({
     </FullScreen>
   );
 }
-function makeReviewDraft(
-  pool: Pool,
-  days: number,
-  existingItems: { id: string; title: string; description: string | null; activity_category: string | null; location_name: string | null; start_time: string | null; position: number }[],
-  startDate?: string | null,
-): Stop[] {
-  const existing: Stop[] = existingItems.map((item) => {
-    const legacy = item.description?.match(/Day\s*(\d+)\s*[·|•-]?\s*(\d{1,2}:\d{2})?/i);
-    const dayFromDate = startDate && item.start_time
-      ? Math.floor((Date.parse(item.start_time) - Date.parse(`${startDate}T00:00:00Z`)) / 86400000) + 1
-      : undefined;
-    return {
-      id: item.id,
-      existingId: item.id,
-      title: item.title,
-      location: item.location_name || "",
-      description: item.description,
-      activityCategory: item.activity_category,
-      existingSnapshot: existingItemSnapshot(item),
-      day: Math.max(1, Math.min(days, dayFromDate || Number(legacy?.[1]) || 1)),
-      time: item.start_time?.slice(11, 16) || legacy?.[2] || "09:00",
-    };
-  });
-  const existingNames = new Set(existing.map((stop) => normalizePlace(stop.title)));
-  const additions = makeDraft(pool, days).filter((stop) => !existingNames.has(normalizePlace(stop.title)));
-  const combined = [...existing];
-  for (const addition of additions) {
-    let day = addition.day;
-    while (day <= days && combined.filter((stop) => stop.day === day).length >= 4) day++;
-    if (day > days) continue;
-    const used = new Set(combined.filter((stop) => stop.day === day).map((stop) => stop.time));
-    const time = ["09:00", "11:00", "14:00", "17:00"].find((value) => !used.has(value)) || "19:00";
-    combined.push({ ...addition, day, time });
-  }
-  return combined.sort((a, b) => a.day - b.day || a.time.localeCompare(b.time));
-}
-
-function synchronizeReviewDraft(
-  pool: Pool,
-  days: number,
-  existingItems: { id: string; title: string; description: string | null; activity_category: string | null; location_name: string | null; start_time: string | null; position: number }[],
-  startDate?: string | null,
-): Pool {
-  const rebuilt = makeReviewDraft(pool, days, existingItems, startDate);
-  const previousByExistingId = new Map(
-    (pool.draft ?? []).filter((stop) => stop.existingId).map((stop) => [stop.existingId!, stop]),
-  );
-  const exclusions = { ...(pool.draftExcludedExisting ?? {}) };
-  const currentById = new Map(existingItems.map((item) => [item.id, item]));
-  const stops: Stop[] = [];
-  for (const freshStop of rebuilt.filter((stop) => stop.existingId)) {
-    const id = freshStop.existingId!;
-    const item = currentById.get(id)!;
-    const fingerprint = existingItemSnapshot(item);
-    if (exclusions[id] === fingerprint) continue;
-    if (exclusions[id]) delete exclusions[id];
-    const previous = previousByExistingId.get(id);
-    stops.push(previous?.existingSnapshot === fingerprint ? { ...freshStop, ...previous } : freshStop);
-  }
-  const selectedIds = new Set(pool.candidates.filter((candidate) => candidate.confirmed).map((candidate) => candidate.id));
-  const freshCandidateIds = new Set(rebuilt.filter((stop) => !stop.existingId).map((stop) => stop.id));
-  for (const previous of pool.draft ?? []) {
-    if (previous.existingId || previous.id.startsWith("manual-") || !selectedIds.has(previous.id) || freshCandidateIds.has(previous.id)) continue;
-    stops.push(previous);
-  }
-  stops.push(...rebuilt.filter((stop) => !stop.existingId && !stops.some((current) => current.id === stop.id)));
-  stops.sort((a, b) => a.day - b.day || a.time.localeCompare(b.time));
-  return { ...pool, draft: stops, draftExcludedExisting: exclusions };
-}
-
-function existingItemSnapshot(item: { id: string; title: string; description: string | null; activity_category: string | null; location_name: string | null; start_time: string | null; position: number }) {
-  return JSON.stringify([item.title, item.description, item.activity_category, item.location_name, item.start_time, item.position]);
-}
-
 function getReviewDayCount(
   items: { description: string | null; start_time: string | null }[],
   trip: Trip | null,
   candidates: Candidate[],
 ) {
-  const existingMaxDay = Math.max(1, ...items.map((item) => {
-    if (trip?.start_date && item.start_time) return Math.max(1, Math.floor((Date.parse(item.start_time) - Date.parse(`${trip.start_date}T00:00:00Z`)) / 86400000) + 1);
-    return Number(item.description?.match(/Day\s*(\d+)/i)?.[1] || 1);
-  }));
-  const selectedCount = candidates.filter((candidate) => candidate.confirmed).length;
+  const existingMaxDay = Math.max(
+    1,
+    ...items.map((item) => {
+      if (trip?.start_date && item.start_time)
+        return Math.max(
+          1,
+          Math.floor(
+            (Date.parse(item.start_time) -
+              Date.parse(`${trip.start_date}T00:00:00Z`)) /
+              86400000,
+          ) + 1,
+        );
+      return Number(item.description?.match(/Day\s*(\d+)/i)?.[1] || 1);
+    }),
+  );
+  const selectedCount = candidates.filter(
+    (candidate) => candidate.confirmed,
+  ).length;
   return trip?.start_date && trip.end_date
     ? Math.max(tripDays(trip.start_date, trip.end_date), existingMaxDay)
-    : Math.max(existingMaxDay, 1, Math.ceil((selectedCount + items.length) / 4));
+    : Math.max(
+        existingMaxDay,
+        1,
+        Math.ceil((selectedCount + items.length) / 4),
+      );
 }
 
 function stableDraft(stops: Stop[] | null) {
-  return JSON.stringify((stops ?? []).map((stop) => [
-    stop.id, stop.title, stop.location, stop.day, stop.time, stop.existingId,
-    stop.description, stop.activityCategory, stop.existingSnapshot,
-  ]));
-}
-
-function normalizePlace(value: string) {
-  return value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return JSON.stringify(
+    (stops ?? []).map((stop) => [
+      stop.id,
+      stop.title,
+      stop.location,
+      stop.day,
+      stop.time,
+      stop.existingId,
+      stop.description,
+      stop.activityCategory,
+      stop.existingSnapshot,
+    ]),
+  );
 }
 
 const s = StyleSheet.create({
   safe: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: bg,
     width: "100%",
     maxWidth: 402,
@@ -1850,11 +2237,13 @@ const s = StyleSheet.create({
   footer: {
     flexShrink: 0,
     paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingVertical: 16,
     backgroundColor: bg,
+    borderTopWidth: 1,
+    borderTopColor: border,
   },
   action: {
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: 28,
     backgroundColor: purple,
     alignItems: "center",
@@ -1884,7 +2273,19 @@ const s = StyleSheet.create({
     color: "#FFFFFF",
     textAlign: "center",
   },
-  actionText: { color: "white", fontSize: 14, fontWeight: "700" },
+  actionText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  disabledButton: {
+    backgroundColor: "#E8DDF8",
+    borderWidth: 1,
+    borderColor: "#CDB7ED",
+    boxShadow: "none",
+  },
+  disabledButtonText: { color: "#56318A" },
   secondary: {
     backgroundColor: "#F9F5FF",
     borderWidth: 1,

@@ -6,6 +6,8 @@ export type Candidate = {
   tags: string[];
   image?: string;
   cover: "bali" | "japan" | "generic";
+  weightedOtherScore?: number;
+  ownVoteWeight?: number;
   up: number;
   down: number;
   confirmed?: boolean;
@@ -25,6 +27,7 @@ export type Stop = {
   existingSnapshot?: string;
 };
 export type Pool = {
+  revision?: string;
   candidates: Candidate[];
   votes: Record<string, Vote>;
   draft: Stop[] | null;
@@ -50,7 +53,9 @@ export function totals(c: Candidate, vote?: Vote) {
     down,
     total: up + down,
     percent: up + down ? Math.round((up / (up + down)) * 100) : 0,
-    score: up - down,
+    score:
+      (c.weightedOtherScore ?? c.up - c.down) +
+      (vote === "up" ? 1 : vote === "down" ? -1 : 0) * (c.ownVoteWeight ?? 1),
   };
 }
 export function toggleVote(votes: Pool["votes"], id: string, vote: Vote) {
@@ -60,8 +65,8 @@ export function toggleVote(votes: Pool["votes"], id: string, vote: Vote) {
   return next;
 }
 export function seedCandidates(destination: string): Candidate[] {
-  const japan = /tokyo|japan|osaka|kyoto/i.test(destination),
-    bali = /bali|indonesia/i.test(destination);
+  const japan = /tokyo|osaka|kyoto/i.test(destination),
+    bali = /bali/i.test(destination);
   const places = japan
     ? /osaka/i.test(destination)
       ? [
@@ -160,9 +165,16 @@ export function moveStopTo(stops: Stop[], id: string, targetIndex: number) {
   const current = stops.findIndex((stop) => stop.id === id);
   if (current < 0) return stops;
   const day = stops[current].day;
-  const dayIndices = stops.map((stop, index) => stop.day === day ? index : -1).filter((index) => index >= 0);
+  const dayIndices = stops
+    .map((stop, index) => (stop.day === day ? index : -1))
+    .filter((index) => index >= 0);
   const dayStops = dayIndices.map((index) => stops[index]);
-  if (targetIndex < 0 || targetIndex >= dayStops.length || targetIndex === dayIndices.indexOf(current)) return stops;
+  if (
+    targetIndex < 0 ||
+    targetIndex >= dayStops.length ||
+    targetIndex === dayIndices.indexOf(current)
+  )
+    return stops;
   const moved = [...dayStops];
   const [stop] = moved.splice(dayIndices.indexOf(current), 1);
   moved.splice(targetIndex, 0, stop);
@@ -171,4 +183,33 @@ export function moveStopTo(stops: Stop[], id: string, targetIndex: number) {
     next[globalIndex] = { ...moved[dayIndex], time: dayStops[dayIndex].time };
   });
   return next;
+}
+
+export type CandidateFilter = "All" | "Unvoted" | "Voted" | "In Draft";
+export function candidateMatchesFilter(
+  pool: Pool,
+  candidate: Candidate,
+  filter: string,
+) {
+  const groupVoted = totals(candidate, pool.votes[candidate.id]).total > 0;
+  return (
+    filter === "All" ||
+    (filter === "In Draft"
+      ? !!candidate.confirmed
+      : filter === "Unvoted"
+        ? !groupVoted
+        : groupVoted)
+  );
+}
+export function candidateFilterCounts(pool: Pool) {
+  return {
+    All: pool.candidates.length,
+    Unvoted: pool.candidates.filter((c) =>
+      candidateMatchesFilter(pool, c, "Unvoted"),
+    ).length,
+    Voted: pool.candidates.filter((c) =>
+      candidateMatchesFilter(pool, c, "Voted"),
+    ).length,
+    "In Draft": pool.candidates.filter((c) => c.confirmed).length,
+  };
 }

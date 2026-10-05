@@ -175,7 +175,7 @@ export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const heroScale = Math.min(windowWidth, 402) / 402;
   const [filter, setFilter] = useState<TripStatus | "All">("All");
-  const [sheet, setSheet] = useState<"notifications" | "expense" | "emergency" | "invite" | "message" | null>(null);
+  const [sheet, setSheet] = useState<"notifications" | "expense" | "emergency" | "message" | null>(null);
   const [quickMessage, setQuickMessage] = useState("");
   const [expenseTitle, setExpenseTitle] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
@@ -421,13 +421,18 @@ export default function HomeScreen() {
               router.push({ pathname: "/trips/[id]/candidates", params: { id: currentTrip.id, from: "home" } });
             }} />
             <QuickAccess icon={<ShieldAlert size={28} color={purple} strokeWidth={1.8} />} label={["Emergency", "Info"]} onPress={() => setSheet("emergency")} />
-            <QuickAccess icon={<UserRoundPlus size={28} color={purple} strokeWidth={1.8} />} label={["Invite", "Members"]} onPress={() => setSheet("invite")} />
+            <QuickAccess icon={<UserRoundPlus size={28} color={purple} strokeWidth={1.8} />} label={["Invite", "Members"]} onPress={() => {
+              const inviteTrip = trips.find(trip => trip.owner_id === user?.id && tripStatus(trip) !== "Past");
+              if (!inviteTrip) { setQuickMessage("Create a trip as Group Leader to invite members."); setSheet("message"); return; }
+              void rememberTrip(inviteTrip.id);
+              router.push({ pathname: "/trips/[id]/itinerary", params: { id: inviteTrip.id, from: "home", action: "invite" } });
+            }} />
           </View>
         </View>
       </ScrollView>
       <BottomSheet
         visible={!!sheet}
-        title={sheet === "expense" ? "Add Expense" : sheet === "emergency" ? "Emergency Info" : sheet === "invite" ? "Invite Members" : sheet === "message" ? "Quick access" : "Notifications"}
+        title={sheet === "expense" ? "Add Expense" : sheet === "emergency" ? "Emergency Info" : sheet === "message" ? "Quick access" : "Notifications"}
         onClose={() => setSheet(null)}
         busy={expenseBusy}
       >
@@ -446,9 +451,6 @@ export default function HomeScreen() {
             {!!profile.emergency_contact.destinationNotes && <Text style={styles.infoText}>{profile.emergency_contact.destinationNotes}</Text>}
           </View> : <Message>No emergency contact saved yet. Add one in Profile.</Message>}
           <Button variant="secondary" onPress={() => { setSheet(null); router.push("/(tabs)/profile"); }}>Open Profile</Button>
-        </> : sheet === "invite" ? <>
-          <Text style={{ color: muted, fontSize: 13 }}>{currentTrip ? `Current trip: ${currentTrip.title}.` : "Create a trip before inviting members."}</Text>
-          <Message>Invitations for existing trips are not connected yet. The invite flow currently supports trip setup only.</Message>
         </> : sheet === "message" ? <Message>{quickMessage}</Message> : <Message>No notifications yet. Live alerts are not connected in this foundation release.</Message>}
       </BottomSheet>
     </SafeAreaView>
@@ -561,10 +563,7 @@ const styles = {
     alignItems: "center" as const,
     justifyContent: "center" as const,
     gap: 6,
-    shadowColor: purple,
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 4 },
+    boxShadow: "0px 4px 6px rgba(60, 25, 80, 0.2)",
     elevation: 3,
   },
   createButtonText: {
@@ -593,10 +592,7 @@ const styles = {
   },
   filterSelected: {
     backgroundColor: purple,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    boxShadow: "0px 2px 4px rgba(60, 25, 80, 0.1)",
     elevation: 2,
   },
   filterText: {
@@ -613,10 +609,7 @@ const styles = {
     borderRadius: 20,
     overflow: "hidden" as const,
     backgroundColor: "white",
-    shadowColor: ink,
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    boxShadow: "0px 4px 8px rgba(60, 25, 80, 0.08)",
     elevation: 2,
   },
   tripCardSpacing: { marginBottom: 6 },
@@ -748,10 +741,7 @@ const styles = {
     borderWidth: 1,
     borderColor: border,
     backgroundColor: "white",
-    shadowColor: ink,
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 4 },
+    boxShadow: "0px 4px 6px rgba(60, 25, 80, 0.03)",
     elevation: 1,
   },
   quickLabel: {

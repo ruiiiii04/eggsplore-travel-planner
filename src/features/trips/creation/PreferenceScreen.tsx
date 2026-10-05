@@ -63,7 +63,7 @@ function PreferenceArtwork({ kind }: { kind: string }) {
 const styles = {
   segment: { flexDirection: "row" as const, backgroundColor: "#F1EAF8", padding: 3, borderRadius: 22 },
   segmentButton: { flex: 1, height: 36, alignItems: "center" as const, justifyContent: "center" as const, borderRadius: 20 },
-  segmentActive: { backgroundColor: "#8050C5", shadowColor: "#7E49C2", shadowOpacity: 0.18, shadowRadius: 4, elevation: 2 },
+  segmentActive: { backgroundColor: "#8050C5", boxShadow: "0 2px 4px rgba(60, 25, 80, 0.18)", elevation: 2 },
   segmentText: { color: "white", fontFamily: "Inter", fontSize: 12, fontWeight: "700" as const },
   segmentInactive: { color: "#857695" },
   grid: { flexDirection: "row" as const, flexWrap: "wrap" as const, justifyContent: "space-between" as const, rowGap: 11 },
