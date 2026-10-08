@@ -2,9 +2,13 @@ export type Trip = {
   id: string;
   title: string;
   destination: string | null;
+  /** Optional future destination-specific cover URL. The current table may omit it. */
+  cover_url?: string | null;
   owner_id: string;
   start_date: string | null;
   end_date: string | null;
+  /** Number of manually planned days used while the trip has no calendar dates. */
+  flexible_day_count?: number;
   created_at: string;
 };
 export type TripStatus = "Live" | "Upcoming" | "Past";

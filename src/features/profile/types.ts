@@ -8,6 +8,7 @@ export type TravelPreference = {
   companion?: string;
   spendingOrder?: string[];
   interests?: string[];
+  categoryWeights?: Record<string, number>;
   createdAt?: string;
   [key: string]: unknown;
 };
@@ -29,6 +30,7 @@ export type EmergencyInfo = {
 };
 export type Profile = {
   id: string;
+  username: string;
   display_name: string | null;
   avatar_url: string | null;
   preferences: Preferences;

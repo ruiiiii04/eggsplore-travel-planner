@@ -1,5 +1,6 @@
 import "../../global.css";
 import { Stack } from "expo-router";
+import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/features/auth/AuthProvider";
@@ -16,7 +17,6 @@ function Routes() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="profile/new" />
         <Stack.Screen name="trips/create" />
-        <Stack.Screen name="trips/[id]" />
       </Stack.Protected>
       <Stack.Screen name="index" />
       <Stack.Screen name="+not-found" />
@@ -24,6 +24,13 @@ function Routes() {
   );
 }
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Fredoka: require("../../assets/fonts/Fredoka.ttf"),
+    Inter: require("../../assets/fonts/Inter.ttf"),
+  });
+
+  if (!fontsLoaded) return <Loading />;
+
   return (
     <SafeAreaProvider>
       <AuthProvider>
