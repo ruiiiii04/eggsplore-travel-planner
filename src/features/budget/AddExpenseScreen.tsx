@@ -3,9 +3,15 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Camera, ChevronLeft, Save } from "lucide-react-native";
 import { Screen, Button, Card, Message } from "@/components/ui";
+import { useAuth } from "@/features/auth/useAuth";
+import { errorMessage } from "@/lib/errors";
 import { CategoryPicker } from "./components/CategoryPicker";
 import { SplitWithPicker, type Member } from "./components/SplitWithPicker";
 import { SelectField, type SelectOption } from "./components/SelectField";
+import { addExpense } from "./api";
+import { categoryHint, formatRange } from "./estimates";
+import { initialsOf, toSplitRows } from "./ledger";
+import { useBudget } from "./useBudget";
 import {
   buildSplits,
   convertToRM,
@@ -37,25 +43,14 @@ const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   other: "Other",
 };
 
-const MOCK_MEMBERS: Member[] = [
-  { id: "you", name: "You", initials: "YO" },
-  { id: "alex", name: "Alex", initials: "AL" },
-  { id: "brenna", name: "Brenna", initials: "BR" },
-  { id: "kavi", name: "Kavi", initials: "KV" },
-];
-
-const MEMBER_OPTIONS: SelectOption[] = MOCK_MEMBERS.map((m) => ({
-  id: m.id,
-  label: m.id === "you" ? "You" : m.name,
-}));
-
-const CURRENT_USER_ID = "you";
-
 export default function AddExpenseScreen() {
   const params = useLocalSearchParams<{
+    tripId?: string;
     category?: string;
     splitType?: string;
   }>();
+  const { user } = useAuth();
+  const { data } = useBudget(params.tripId);
 
   const [description, setDescription] = useState("");
   const [amountText, setAmountText] = useState("");
@@ -64,17 +59,29 @@ export default function AddExpenseScreen() {
     (params.category as ExpenseCategory) ?? null,
   );
   const [customCategoryLabel, setCustomCategoryLabel] = useState("");
-  const [paidBy, setPaidBy] = useState<SelectOption>(MEMBER_OPTIONS[0]);
+  const [paidByChoice, setPaidByChoice] = useState<string | null>(null);
   const [splitType, setSplitType] = useState<SelectOption>(
     SPLIT_OPTIONS.find((o) => o.id === params.splitType) ?? SPLIT_OPTIONS[0],
   );
-  const [selectedIds, setSelectedIds] = useState<string[]>(
-    MOCK_MEMBERS.map((m) => m.id),
-  );
+  const [selectedChoice, setSelectedChoice] = useState<string[] | null>(null);
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>(
     {},
   );
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const members: Member[] = (data?.members ?? []).map((m) => ({
+    id: m.user_id,
+    name: m.user_id === user?.id ? "You" : (m.display_name ?? "Member"),
+    initials: initialsOf(m.display_name),
+  }));
+  const memberOptions: SelectOption[] = members.map((m) => ({
+    id: m.id,
+    label: m.name,
+  }));
+  const paidById = paidByChoice ?? user?.id ?? "";
+  const paidBy = memberOptions.find((o) => o.id === paidById) ?? null;
+  const selectedIds = selectedChoice ?? members.map((m) => m.id);
 
   const now = useMemo(
     () =>
@@ -100,9 +107,11 @@ export default function AddExpenseScreen() {
     setAmountText(cleaned);
   }
 
-  function toggleMember(id: string) {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id],
+  function toggleMember(memberId: string) {
+    setSelectedChoice(
+      selectedIds.includes(memberId)
+        ? selectedIds.filter((m) => m !== memberId)
+        : [...selectedIds, memberId],
     );
   }
 
@@ -111,13 +120,19 @@ export default function AddExpenseScreen() {
     setAmountText("");
     setCategory(null);
     setCustomCategoryLabel("");
+    setPaidByChoice(null);
     setSplitType(SPLIT_OPTIONS[0]);
-    setSelectedIds(MOCK_MEMBERS.map((m) => m.id));
+    setSelectedChoice(null);
     setCustomAmounts({});
     setError(null);
   }
 
-    function handleSave() {
+  async function handleSave() {
+    if (!user || !params.tripId) {
+      setError("No trip selected. Go back and open the Budget page again.");
+      return;
+    }
+
     const effectiveDescription =
       category === "other" && customCategoryLabel.trim()
         ? customCategoryLabel
@@ -133,49 +148,47 @@ export default function AddExpenseScreen() {
       return;
     }
 
-    // Everything downstream (totals, history) is always stored/shown in RM,
-    // regardless of what currency the user typed the amount in.
+    // Totals and history are always stored in RM, whatever currency was typed.
     const amountRM = convertToRM(Number(amountText), currency.id);
 
+    let shares: Record<string, number>;
     if (splitType.id === "amount") {
-      const sum = Object.values(customAmounts).reduce(
-        (s, v) => s + (Number(v) || 0),
-        0,
+      shares = Object.fromEntries(
+        Object.entries(customAmounts).map(([id, v]) => [id, Number(v) || 0]),
       );
+      const sum = Object.values(shares).reduce((s, v) => s + v, 0);
       if (Math.round(sum * 100) !== Math.round(amountRM * 100)) {
         setError(
           `Split amounts (RM ${sum.toFixed(2)}) must add up to the total (RM ${amountRM.toFixed(2)}).`,
         );
         return;
       }
+    } else {
+      // The payer always shares the cost when splitting evenly.
+      const ids = Array.from(new Set([...selectedIds, paidById]));
+      shares = buildSplits(splitType.id as SplitType, amountRM, paidById, ids);
     }
 
-    const splits =
-      splitType.id === "amount"
-        ? Object.fromEntries(
-            Object.entries(customAmounts).map(([id, v]) => [id, Number(v) || 0]),
-          )
-        : buildSplits(
-            splitType.id as SplitType,
-            amountRM,
-            paidBy.id,
-            selectedIds,
-          );
-
-    // TODO: once Supabase access is available, insert into expenses +
-    // expense_splits here instead of logging.
-    console.log("Expense to save:", {
-      description: effectiveDescription,
-      amount: amountRM,
-      original_amount: Number(amountText),
-      original_currency: currency.id,
-      category,
-      paid_by: paidBy.id,
-      created_by: CURRENT_USER_ID,
-      splits,
-    });
-
-    router.back();
+    setSaving(true);
+    setError(null);
+    try {
+      await addExpense({
+        trip_id: params.tripId,
+        paid_by: paidById,
+        created_by: user.id,
+        title: effectiveDescription.trim(),
+        amount: amountRM,
+        category,
+        original_amount: Number(amountText),
+        original_currency: currency.id,
+        splits: toSplitRows(shares, paidById),
+      });
+      router.back();
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -192,7 +205,7 @@ export default function AddExpenseScreen() {
 
       <View className="gap-1">
         <Text className="text-xs text-muted">Total Amount</Text>
-      <View className="flex-row items-center justify-center gap-1">
+        <View className="flex-row items-center justify-center gap-1">
           <SelectField
             label="Currency"
             value={currency}
@@ -240,6 +253,16 @@ export default function AddExpenseScreen() {
         </View>
         <CategoryPicker value={category} onChange={setCategory} />
 
+        {category && category !== "other" && (
+          <Text className="text-xs text-muted">
+            Typical for {data?.trip.destination || "this trip"}:{" "}
+            {formatRange(
+              categoryHint(data?.trip.destination ?? null, category),
+            )}{" "}
+            per person per day (estimate)
+          </Text>
+        )}
+
         {category === "other" && (
           <TextInput
             value={customCategoryLabel}
@@ -256,14 +279,14 @@ export default function AddExpenseScreen() {
           <View>
             <Text className="text-xs font-semibold text-muted">PAID BY</Text>
             <Text className="text-sm font-semibold text-brand">
-              {paidBy.id === CURRENT_USER_ID ? "You" : paidBy.label}
+              {paidBy?.label ?? "..."}
             </Text>
           </View>
           <SelectField
             label="Paid By"
             value={paidBy}
-            options={MEMBER_OPTIONS}
-            onChange={setPaidBy}
+            options={memberOptions}
+            onChange={(option) => setPaidByChoice(option.id)}
           />
         </View>
 
@@ -278,20 +301,24 @@ export default function AddExpenseScreen() {
         </View>
 
         <SplitWithPicker
-          members={MOCK_MEMBERS.filter((m) => m.id !== paidBy.id)}
+          members={
+            splitType.id === "amount"
+              ? members
+              : members.filter((m) => m.id !== paidById)
+          }
           splitType={splitType.id as SplitType}
           selectedIds={selectedIds}
           onToggleMember={toggleMember}
           customAmounts={customAmounts}
-          onChangeAmount={(id, v) =>
-            setCustomAmounts((prev) => ({ ...prev, [id]: v }))
+          onChangeAmount={(memberId, v) =>
+            setCustomAmounts((prev) => ({ ...prev, [memberId]: v }))
           }
         />
       </Card>
 
       <Message error>{error}</Message>
 
-      <Button onPress={handleSave}>
+      <Button busy={saving} onPress={handleSave}>
         <Save size={18} color="white" />
         <Text className="text-white font-semibold">Save Expense</Text>
       </Button>

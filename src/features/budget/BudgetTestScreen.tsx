@@ -1,37 +1,21 @@
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Plus, Pencil } from "lucide-react-native";
 import { Screen, Heading, Button, Card, Message } from "@/components/ui";
+import { useAuth } from "@/features/auth/useAuth";
+import { useTrips } from "@/features/trips/useTrips";
+import { TripTabs } from "@/features/trips/TripTabs";
+import { errorMessage } from "@/lib/errors";
 import { BudgetSummaryCard } from "./components/BudgetSummaryCard";
 import { SettlementRow } from "./components/SettlementRow";
 import { ExpenseListItem } from "./components/ExpenseListItem";
 import { SelectField, type SelectOption } from "./components/SelectField";
-import type { Expense, ExpenseCategory, SplitType } from "./model";
-import { needsBudgetSetup } from "./model";
-
-const mockExpenses: Expense[] = [
-  {
-    id: "1",
-    trip_id: "trip-1",
-    paid_by: "user-alex",
-    created_by: "user-alex",
-    title: "Hotel Deposit",
-    amount: 420,
-    category: "stay",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    trip_id: "trip-1",
-    paid_by: "user-you",
-    created_by: "user-you",
-    title: "Ramen Dinner",
-    amount: 85,
-    category: "food",
-    created_at: new Date().toISOString(),
-  },
-];
+import { TripForecastCard } from "./components/TripForecastCard";
+import { saveBudget, setSplitSettled } from "./api";
+import { debtsOwedBy, mySpent } from "./ledger";
+import { useBudget } from "./useBudget";
+import type { ExpenseCategory } from "./model";
 
 const CATEGORY_OPTIONS: { key: ExpenseCategory; label: string; emoji: string }[] = [
   { key: "food", label: "Food", emoji: "☕" },
@@ -39,7 +23,6 @@ const CATEGORY_OPTIONS: { key: ExpenseCategory; label: string; emoji: string }[]
   { key: "stay", label: "Stay", emoji: "🏠" },
   { key: "activities", label: "Activities", emoji: "🖼️" },
   { key: "shopping", label: "Shopping", emoji: "🛍️" },
-  { key: "other", label: "Other", emoji: "⋯" },
 ];
 
 const SPLIT_OPTIONS: SelectOption[] = [
@@ -49,30 +32,45 @@ const SPLIT_OPTIONS: SelectOption[] = [
 ];
 
 export default function BudgetTestScreen() {
-  // Mock: null means "no budget set yet" so the setup prompt can trigger.
-  const [budget, setBudget] = useState<number | null>(null);
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { user } = useAuth();
+  const { trips, loading: tripsLoading } = useTrips();
+  // Use the trip from the link if there is one, otherwise the latest trip.
+  const tripId = id ?? trips[0]?.id;
+  const { data, loading, error, refresh } = useBudget(tripId);
+
   const [budgetInput, setBudgetInput] = useState("");
+  const [budgetError, setBudgetError] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [defaultSplit, setDefaultSplit] = useState<SelectOption>(
     SPLIT_OPTIONS[0],
   );
 
-  const spent = 1820;
-  const showSetupPrompt = needsBudgetSetup(
-    budget !== null,
-    mockExpenses.length === 0 ? 0 : 0, // mock: pretend trip has 0 real expenses logged by this user
-  );
+  const budget = data?.budget?.budget_amount ?? null;
+  const spent = data && user ? mySpent(data.splits, user.id) : 0;
+  const debts = data && user ? debtsOwedBy(user.id, data.expenses, data.splits) : {};
+  const [topDebtorId, topDebtAmount] =
+    Object.entries(debts).sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+
+  function nameOf(userId: string | null): string {
+    if (!userId) return "Someone";
+    if (userId === user?.id) return "You";
+    return (
+      data?.members.find((m) => m.user_id === userId)?.display_name ?? "Member"
+    );
+  }
 
   function openCategory(category: ExpenseCategory) {
+    if (!tripId) return;
     router.push({
       pathname: "/add-expense",
-      params: { category, splitType: defaultSplit.id },
+      params: { tripId, category, splitType: defaultSplit.id },
     });
   }
 
-  const [budgetError, setBudgetError] = useState<string | null>(null);
-
-  function saveBudget() {
+  async function submitBudget() {
     const trimmed = budgetInput.trim();
     const value = Number(trimmed);
     if (!trimmed || Number.isNaN(value) || !/^\d+(\.\d{1,2})?$/.test(trimmed)) {
@@ -83,113 +81,182 @@ export default function BudgetTestScreen() {
       setBudgetError("Budget must be greater than zero.");
       return;
     }
-    setBudgetError(null);
-    setBudget(value);
-    setSetupOpen(false);
+    if (!tripId || !user) return;
+    setSaving(true);
+    try {
+      await saveBudget(tripId, user.id, value);
+      setBudgetError(null);
+      setSetupOpen(false);
+      refresh();
+    } catch (cause) {
+      setBudgetError(errorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function settleUp() {
+    if (!data || !user || !topDebtorId) return;
+    const payerOf = new Map(data.expenses.map((e) => [e.id, e.paid_by]));
+    const ids = data.splits
+      .filter(
+        (s) =>
+          s.user_id === user.id &&
+          !s.settled &&
+          payerOf.get(s.expense_id) === topDebtorId,
+      )
+      .map((s) => s.id);
+    setActionError("");
+    try {
+      await Promise.all(ids.map((splitId) => setSplitSettled(splitId, true)));
+      refresh();
+    } catch (cause) {
+      setActionError(errorMessage(cause));
+    }
   }
 
   return (
     <View style={{ flex: 1 }}>
       <Screen>
-        <Heading>Budget Test Page</Heading>
-        <Text className="text-xs text-muted">
-          Standalone preview — mock data only, not connected to Supabase yet.
-        </Text>
+        <Heading>{data?.trip.title ?? "Budget"}</Heading>
+        <TripTabs active="budget" />
 
-        {/* Budget summary + settlement grouped in one light-purple section */}
-        <View className="rounded-xl bg-lavender p-3 gap-3">
-          {budget === null ? (
-            <Card>
-              <Text className="text-sm font-semibold text-ink">
-                No budget set yet
-              </Text>
-              <Text className="text-xs text-muted">
-                Set your personal budget for this trip to start tracking.
-              </Text>
-              <Button
-                onPress={() => {
-                  setBudgetError(null);
-                  setSetupOpen(true);
-                }}
-              >
-                Set Budget
-              </Button>
-            </Card>
-          ) : (
-            <>
-              <View className="flex-row justify-end">
-                <Pressable
-                  onPress={() => {
-                    setBudgetInput(String(budget));
-                    setBudgetError(null);
-                    setSetupOpen(true);
-                  }}
-                  className="flex-row items-center gap-1"
-                >
-                  <Pencil size={14} color="#7E49C2" />
-                  <Text className="text-xs text-brand font-semibold">
-                    Edit Budget
-                  </Text>
-                </Pressable>
-              </View>
-              <BudgetSummaryCard budget={budget} spent={spent} currency="RM" />
-            </>
-          )}
-          <SettlementRow owesName="Alex" amount={50} currency="RM" />
-        </View>
-
-        <Card>
-          <View className="flex-row items-center justify-between">
-            <Text className="text-base font-semibold text-ink">
-              Quick Add by Category
+        {!tripId && !tripsLoading && (
+          <Card>
+            <Text className="text-sm font-semibold text-ink">No trip yet</Text>
+            <Text className="text-xs text-muted">
+              Create a trip first, then come back to track its budget.
             </Text>
-            <SelectField
-              label="Default Split Type"
-              value={defaultSplit}
-              options={SPLIT_OPTIONS}
-              onChange={setDefaultSplit}
-            />
-          </View>
-          <View className="flex-row justify-between">
-            {CATEGORY_OPTIONS.filter((c) => c.key !== "other").map((c) => (
-              <Pressable
-                key={c.key}
-                onPress={() => openCategory(c.key)}
-                className="items-center gap-1"
-              >
-                <View className="w-12 h-12 rounded-full items-center justify-center bg-lavender">
-                  <Text className="text-lg">{c.emoji}</Text>
-                </View>
-                <Text className="text-xs text-ink">{c.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Card>
+            <Button onPress={() => router.push("/trips/create")}>
+              Create Trip
+            </Button>
+          </Card>
+        )}
 
-        <View className="gap-2">
-          <Text className="text-lg font-bold text-ink">Recent Expenses</Text>
-          {mockExpenses.map((expense) => (
-            <ExpenseListItem
-              key={expense.id}
-              expense={expense}
-              paidByName={expense.paid_by === "user-alex" ? "Alex" : "You"}
+        {loading && !data && <Message>Loading budget...</Message>}
+        <Message error>{error}</Message>
+        {!!error && <Button variant="secondary" onPress={refresh}>Retry</Button>}
+
+        {data && user && (
+          <>
+            <View className="rounded-xl bg-lavender p-3 gap-3">
+              {budget === null ? (
+                <Card>
+                  <Text className="text-sm font-semibold text-ink">
+                    No budget set yet
+                  </Text>
+                  <Text className="text-xs text-muted">
+                    Set your personal budget for this trip to start tracking.
+                  </Text>
+                  <Button
+                    onPress={() => {
+                      setBudgetInput("");
+                      setBudgetError(null);
+                      setSetupOpen(true);
+                    }}
+                  >
+                    Set Budget
+                  </Button>
+                </Card>
+              ) : (
+                <>
+                  <View className="flex-row justify-end">
+                    <Pressable
+                      onPress={() => {
+                        setBudgetInput(String(budget));
+                        setBudgetError(null);
+                        setSetupOpen(true);
+                      }}
+                      className="flex-row items-center gap-1"
+                    >
+                      <Pencil size={14} color="#7E49C2" />
+                      <Text className="text-xs text-brand font-semibold">
+                        Edit Budget
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <BudgetSummaryCard budget={budget} spent={spent} currency="RM" />
+                </>
+              )}
+              <SettlementRow
+                owesName={topDebtorId ? nameOf(topDebtorId) : null}
+                amount={topDebtAmount}
+                currency="RM"
+              />
+              {topDebtorId && (
+                <Button variant="secondary" onPress={settleUp}>
+                  Mark as paid to {nameOf(topDebtorId)}
+                </Button>
+              )}
+              <Message error>{actionError}</Message>
+            </View>
+
+            <TripForecastCard
+              destination={data.trip.destination}
+              startDate={data.trip.start_date}
+              endDate={data.trip.end_date}
+              budget={budget}
             />
-          ))}
-        </View>
+
+            <Card>
+              <View className="flex-row items-center justify-between">
+                <Text className="text-base font-semibold text-ink">
+                  Quick Add by Category
+                </Text>
+                <SelectField
+                  label="Default Split Type"
+                  value={defaultSplit}
+                  options={SPLIT_OPTIONS}
+                  onChange={setDefaultSplit}
+                />
+              </View>
+              <View className="flex-row justify-between">
+                {CATEGORY_OPTIONS.map((c) => (
+                  <Pressable
+                    key={c.key}
+                    onPress={() => openCategory(c.key)}
+                    className="items-center gap-1"
+                  >
+                    <View className="w-12 h-12 rounded-full items-center justify-center bg-lavender">
+                      <Text className="text-lg">{c.emoji}</Text>
+                    </View>
+                    <Text className="text-xs text-ink">{c.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Card>
+
+            <View className="gap-2">
+              <Text className="text-lg font-bold text-ink">Recent Expenses</Text>
+              {data.expenses.length === 0 && (
+                <Message>No expenses yet. Tap Add Expense to log one.</Message>
+              )}
+              {data.expenses.map((expense) => (
+                <ExpenseListItem
+                  key={expense.id}
+                  expense={expense}
+                  paidByName={nameOf(expense.paid_by)}
+                />
+              ))}
+            </View>
+          </>
+        )}
       </Screen>
 
-      {/* Floating Add Expense button, bottom-right, fixed over the screen */}
-      <Pressable
-        onPress={() => router.push("/add-expense")}
-        accessibilityLabel="Add Expense"
-        style={{ position: "absolute", bottom: 24, right: 20 }}
-        className="flex-row items-center gap-2 rounded-full bg-brand px-5 py-3.5"
-      >
-        <Plus size={20} color="white" />
-        <Text className="text-white font-semibold text-sm">Add Expense</Text>
-      </Pressable>
+      {data && tripId && (
+        <Pressable
+          onPress={() =>
+            router.push({ pathname: "/add-expense", params: { tripId } })
+          }
+          accessibilityLabel="Add Expense"
+          style={{ position: "absolute", bottom: 24, right: 20 }}
+          className="flex-row items-center gap-2 rounded-full bg-brand px-5 py-3.5"
+        >
+          <Plus size={20} color="white" />
+          <Text className="text-white font-semibold text-sm">Add Expense</Text>
+        </Pressable>
+      )}
 
-      {/* First-time / edit budget setup, shown via BottomSheet pattern inline */}
       {setupOpen && (
         <View
           style={{
@@ -217,7 +284,9 @@ export default function BudgetTestScreen() {
             <Message error={!!budgetError}>
               {budgetError ?? "This is your own personal budget, not shared."}
             </Message>
-            <Button onPress={saveBudget}>Save Budget</Button>
+            <Button busy={saving} onPress={submitBudget}>
+              Save Budget
+            </Button>
             <Button variant="ghost" onPress={() => setSetupOpen(false)}>
               Cancel
             </Button>
