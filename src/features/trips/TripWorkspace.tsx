@@ -13,8 +13,9 @@ import { rememberTrip } from "./recentTrip";
 import CandidatePool from "../decision-engine/CandidatePool";
 import { BottomSheet, Button } from "@/components/ui";
 import { cancelNoteReminder, syncNoteReminder } from "./noteReminders";
+import { AddExpenseButton, BudgetContent } from "../budget/BudgetContent";
 
-type ScreenMode = "trip" | "itinerary" | "notes" | "candidates";
+type ScreenMode = "trip" | "itinerary" | "notes" | "candidates" | "budget";
 type ItineraryItem = { id: string; title: string; description: string | null; activity_category: string | null; location_name: string | null; start_time: string | null; position: number };
 type NoteItem = { id: string; title: string; detail: string; done?: boolean; icon?: string; reminderDay?: number | null; reminderDate?: string | null; reminderTime?: string | null };
 type AddKind = "activity" | "note" | null;
@@ -443,7 +444,7 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
 
   return <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1, width: "100%", backgroundColor: "#FBF9FD" }}>
     <ScrollView ref={scrollRef} contentContainerStyle={{ width: "100%", maxWidth: 402, alignSelf: "center", paddingBottom: 18 }} showsVerticalScrollIndicator={false}>
-      <WorkspaceHeader role={trip?.owner_id === user?.id ? "Group Leader" : "Member"} title={title} destination={destination} dateRange={dateRange} id={id} trips={allTrips} active={activeMode === "candidates" ? "candidates" : "itinerary"} go={go} onMore={openTripManagement} onBack={() => from === "home" ? router.replace("/(tabs)/home") : router.canGoBack() ? router.back() : router.replace("/(tabs)/home")} />
+      <WorkspaceHeader role={trip?.owner_id === user?.id ? "Group Leader" : "Member"} title={title} destination={destination} dateRange={dateRange} id={id} trips={allTrips} active={activeMode === "candidates" ? "candidates" : activeMode === "budget" ? "budget" : "itinerary"} go={go} onMore={openTripManagement} onBack={() => from === "home" ? router.replace("/(tabs)/home") : router.canGoBack() ? router.back() : router.replace("/(tabs)/home")} />
       {activeMode === "trip" && <TripOverview destination={destination} dateRange={dateRange} itemsCount={items.length} openItinerary={() => go("itinerary")} openCandidates={() => go("candidates")} />}
       {(activeMode === "itinerary" || activeMode === "notes") && <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
         <WorkspacePlanningCard mode={activeMode} itemsCount={items.length} canEdit={activeMode === "notes" || trip?.owner_id === user?.id} edit={() => activeMode === "notes" ? openAdd("note") : setEditItineraryOpen(true)} />
@@ -451,6 +452,7 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
       </View>}
       {activeMode === "itinerary" && <ItineraryContent items={items} destination={destination} startDate={trip?.start_date} endDate={trip?.end_date} flexibleDayCount={trip?.flexible_day_count ?? 1} canEdit={trip?.owner_id === user?.id} isDayExpanded={(date) => !collapsedDays[date]} toggleDay={(date) => setCollapsedDays((previous) => ({ ...previous, [date]: !previous[date] }))} addActivity={(date, dayNumber) => openAdd("activity", date, dayNumber)} addDay={() => void addDay()} editActivity={openEditActivity} deleteActivity={(item) => void deleteActivity(item)} deleteDay={deleteDay} moveActivity={(day, item, offset) => void moveActivity(day, item, offset)} />}
       {activeMode === "notes" && <NotesContent items={noteItems} value={notes} onChange={saveNotes} onToggleNote={(note) => { const updated = { ...note, done: !note.done }; saveNoteItems(noteItems.map((entry) => entry.id === note.id ? updated : entry)); void syncNoteReminder({ storageKey: reminderNotificationKey, note: updated, tripTitle: title }).catch((cause) => setReminderNotice(errorMessage(cause))); }} destination={destination} tripDays={tripDays} addNote={() => openAdd("note")} editNote={openEditNote} deleteNote={deleteNote} loading={notesLoading || notesLoadedScope !== notesScope} syncError={notesError} reminderNotice={reminderNotice} />}
+      {activeMode === "budget" && !!id && <BudgetContent key={id} tripId={id} />}
       {activeMode === "candidates" && <CandidatePool key={id} tripId={id} trip={trip} existingItems={items} onPublished={(result) => {
         itineraryVersion.current++;
         setItems(result.items);
@@ -461,6 +463,7 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
       }} />}
       {!!error && <Text style={{ color: "#B43F60", paddingHorizontal: 20, marginTop: 8 }}>{error}</Text>}
     </ScrollView>
+    {activeMode === "budget" && !!id && <AddExpenseButton tripId={id} />}
     <BottomSheet visible={editItineraryOpen} title="Edit Itinerary" onClose={() => setEditItineraryOpen(false)}>
       <Text style={{ color: muted, fontSize: 12 }}>Choose an activity to edit its name, place, day or time.</Text>
       {items.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={"Edit " + item.title} onPress={() => { setEditItineraryOpen(false); openEditActivity(item); }} style={{ minHeight: 48, padding: 12, borderRadius: 12, backgroundColor: "white", flexDirection: "row", alignItems: "center", gap: 8 }}><View style={{ flex: 1 }}><Text style={{ color: ink, fontWeight: "700" }}>{item.title}</Text><Text style={{ color: muted, fontSize: 11 }}>{item.location_name || "Place not set"}</Text></View><Pencil color={purple} size={18} /></Pressable>)}
@@ -545,7 +548,7 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
   </SafeAreaView>;
 }
 
-function WorkspaceHeader({ role, title, destination, dateRange, id, trips, active, go, onMore, onBack }: { role: "Group Leader" | "Member"; title: string; destination: string; dateRange: string; id: string; trips: Trip[]; active: "itinerary" | "candidates"; go: (mode: ScreenMode) => void; onMore: () => void; onBack: () => void }) {
+function WorkspaceHeader({ role, title, destination, dateRange, id, trips, active, go, onMore, onBack }: { role: "Group Leader" | "Member"; title: string; destination: string; dateRange: string; id: string; trips: Trip[]; active: "itinerary" | "candidates" | "budget"; go: (mode: ScreenMode) => void; onMore: () => void; onBack: () => void }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const cover = /japan|tokyo|kyoto|osaka|hokkaido/i.test(`${destination} ${title}`) ? require("../../../assets/trip-japan-cover.png") : require("../../../assets/trip-bali-cover.png");
   const selectTrip = (tripId: string) => {
@@ -560,8 +563,8 @@ function WorkspaceHeader({ role, title, destination, dateRange, id, trips, activ
     <MainTabs active={active} go={go} />
   </View>;
 }
-function MainTabs({ active, go }: { active: "itinerary" | "candidates"; go: (mode: ScreenMode) => void }) {
-  return <View style={{ flexDirection: "row", marginTop: 20, padding: 4, borderRadius: 28, backgroundColor: pale, borderWidth: 1, borderColor: line }}>{([["itinerary", "Itinerary", Plane], ["candidates", "Vote", UsersRound], ["budget", "Budget", Wallet]] as const).map(([key, label, Icon]) => <Pressable key={key} onPress={() => key !== "budget" && go(key)} style={{ flex: 1, minHeight: 44, borderRadius: 24, backgroundColor: active === key ? purple : "transparent", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}><Icon size={17} color={active === key ? "white" : muted} /><Text numberOfLines={1} style={{ color: active === key ? "white" : muted, fontSize: 11, fontWeight: "600" }}>{label}</Text></Pressable>)}</View>;
+function MainTabs({ active, go }: { active: "itinerary" | "candidates" | "budget"; go: (mode: ScreenMode) => void }) {
+  return <View style={{ flexDirection: "row", marginTop: 20, padding: 4, borderRadius: 28, backgroundColor: pale, borderWidth: 1, borderColor: line }}>{([["itinerary", "Itinerary", Plane], ["candidates", "Vote", UsersRound], ["budget", "Budget", Wallet]] as const).map(([key, label, Icon]) => <Pressable key={key} onPress={() => go(key)} style={{ flex: 1, minHeight: 44, borderRadius: 24, backgroundColor: active === key ? purple : "transparent", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}><Icon size={17} color={active === key ? "white" : muted} /><Text numberOfLines={1} style={{ color: active === key ? "white" : muted, fontSize: 11, fontWeight: "600" }}>{label}</Text></Pressable>)}</View>;
 }
 function TripOverview({ destination, dateRange, itemsCount, openItinerary, openCandidates }: { destination: string; dateRange: string; itemsCount: number; openItinerary: () => void; openCandidates: () => void }) {
   return <View style={{ paddingHorizontal: 20, paddingTop: 20 }}>
