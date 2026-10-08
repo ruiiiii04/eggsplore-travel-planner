@@ -17,6 +17,10 @@ import { errorMessage } from "@/lib/errors";
 import { categories, companions, interestGroups } from "./options";
 import { readProfile, updateProfile } from "./service";
 import type { TravelPreference } from "./types";
+import {
+  memberCategoryWeights,
+  preferenceCategories,
+} from "../../../supabase/functions/_shared/preference-weights";
 export default function PreferenceScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { user } = useAuth();
@@ -31,6 +35,9 @@ export default function PreferenceScreen() {
     "Transport",
   ]);
   const [interests, setInterests] = useState<string[]>([]);
+  const [categoryWeights, setCategoryWeights] = useState<
+    Record<string, string>
+  >({});
   const [original, setOriginal] = useState<TravelPreference | null>(null);
   const [loading, setLoading] = useState(!!id);
   const [busy, setBusy] = useState(false);
@@ -52,12 +59,20 @@ export default function PreferenceScreen() {
         setOriginal(item);
         setName(item.name);
         setCategory(item.category ?? "beach");
-        setPace(item.pace ?? "Moderate");
+        setPace(item.pace === "Packed" ? "Intense" : (item.pace ?? "Moderate"));
         setCompanion(item.companion ?? "solo");
         setOrder(
           item.spendingOrder ?? ["Stay", "Food", "Activities", "Transport"],
         );
         setInterests(item.interests ?? []);
+        setCategoryWeights(
+          Object.fromEntries(
+            Object.entries(item.categoryWeights ?? {}).map(([k, v]) => [
+              k,
+              String(v),
+            ]),
+          ),
+        );
       })
       .catch((cause) => {
         if (active) setError(errorMessage(cause));
@@ -85,6 +100,20 @@ export default function PreferenceScreen() {
       setError("Enter a profile name.");
       return;
     }
+    const suppliedWeights = Object.fromEntries(
+      Object.entries(categoryWeights)
+        .filter(([, v]) => v.trim() !== "")
+        .map(([k, v]) => [k, Number(v)]),
+    );
+    if (
+      !remove &&
+      Object.values(suppliedWeights).some(
+        (v) => !Number.isFinite(v) || v < 0 || v > 100,
+      )
+    ) {
+      setError("Category weights must be numbers between 0 and 100.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -100,6 +129,9 @@ export default function PreferenceScreen() {
         companion,
         spendingOrder: order,
         interests,
+        categoryWeights: Object.keys(suppliedWeights).length
+          ? suppliedWeights
+          : undefined,
         createdAt: original?.createdAt ?? new Date().toISOString(),
       };
       await updateProfile(user.id, (current) => {
@@ -140,9 +172,7 @@ export default function PreferenceScreen() {
           <ArrowLeft size={22} color="#7E49C2" />
         </Button>
         <View className="flex-1">
-          <Heading>
-            {id ? "Edit Preference Profile" : "Create New Profile"}
-          </Heading>
+          <Heading>{id ? "Edit Profile" : "New Profile"}</Heading>
         </View>
       </View>
       <Message error>{error}</Message>
@@ -150,14 +180,16 @@ export default function PreferenceScreen() {
       {!!id && !loading && !original && (
         <Button onPress={() => setRetry((value) => value + 1)}>Retry</Button>
       )}
+      <SectionTitle>Basic Info</SectionTitle>
       <Field
-        label="Profile name"
+        label="Profile Name *"
         value={name}
         onChangeText={setName}
         editable={!disabled}
-        placeholder="My next adventure"
+        placeholder="e.g. Beach Lover"
       />
-      <SectionTitle>Travel style</SectionTitle>
+      <SectionTitle>Icon</SectionTitle>
+      <Message>Tap to select a category</Message>
       <View className="flex-row flex-wrap gap-2">
         {categories.map((item) => (
           <Button
@@ -169,9 +201,49 @@ export default function PreferenceScreen() {
           >{`${item.emoji} ${item.name}`}</Button>
         ))}
       </View>
-      <SectionTitle>Travel pace</SectionTitle>
+      <SectionTitle>Category weights (0–100%)</SectionTitle>
+      <Message>
+        Higher weights give matching places more influence in your votes. Leave
+        all fields blank to use your selected interests; zero disables a
+        category. We normalize weights so every member has the same maximum vote
+        strength.
+      </Message>
+      <Button
+        variant="secondary"
+        disabled={disabled}
+        onPress={() => {
+          const selected = categories.find((c) => c.id === category);
+          const defaults = memberCategoryWeights([
+            { category, tags: selected?.tags, interests },
+          ]);
+          setCategoryWeights(
+            Object.fromEntries(
+              preferenceCategories.map((c) => [
+                c,
+                String(Math.round((defaults[c] ?? 0) * 100)),
+              ]),
+            ),
+          );
+        }}
+      >
+        Use template weights
+      </Button>
+      {preferenceCategories.map((c) => (
+        <Field
+          key={c}
+          label={c + " (%)"}
+          keyboardType="decimal-pad"
+          value={categoryWeights[c] ?? ""}
+          editable={!disabled}
+          placeholder="Automatic"
+          onChangeText={(value) =>
+            setCategoryWeights((previous) => ({ ...previous, [c]: value }))
+          }
+        />
+      ))}
+      <SectionTitle>Travel Pace</SectionTitle>
       <View className="flex-row flex-wrap gap-2">
-        {["Relaxed", "Moderate", "Packed"].map((value) => (
+        {["Relaxed", "Moderate", "Intense"].map((value) => (
           <Button
             key={value}
             disabled={disabled}
@@ -182,7 +254,8 @@ export default function PreferenceScreen() {
           </Button>
         ))}
       </View>
-      <SectionTitle>Travel companions</SectionTitle>
+      <SectionTitle>Companion Type</SectionTitle>
+      <Message>Who are you travelling with?</Message>
       <View className="flex-row flex-wrap gap-2">
         {companions.map((item) => (
           <Button
@@ -195,14 +268,18 @@ export default function PreferenceScreen() {
           </Button>
         ))}
       </View>
-      <SectionTitle>Spending priorities</SectionTitle>
+      <SectionTitle>Spending Priority</SectionTitle>
+      <Message>Use the arrows to rank where you want to splurge most</Message>
       <View>
         {order.map((item, index) => (
           <View
             key={item}
             className="flex-row items-center border-b border-line py-1 gap-2"
           >
-            <Text className="text-base text-ink flex-1">
+            <Text
+              style={{ fontFamily: "Inter" }}
+              className="text-base text-ink flex-1"
+            >
               {index + 1}. {item}
             </Text>
             <Button
@@ -227,7 +304,10 @@ export default function PreferenceScreen() {
       <SectionTitle>Interests</SectionTitle>
       {interestGroups.map((group) => (
         <View key={group.title} className="gap-3">
-          <Text className="text-base font-semibold text-ink">
+          <Text
+            style={{ fontFamily: "Inter" }}
+            className="text-base font-semibold text-ink"
+          >
             {group.title}
           </Text>
           <View className="flex-row flex-wrap gap-2">
@@ -255,7 +335,7 @@ export default function PreferenceScreen() {
         busy={busy}
         onPress={() => void save()}
       >
-        Save profile
+        {id ? "Save Profile" : "Create Profile"}
       </Button>
       {!!id && (
         <Button

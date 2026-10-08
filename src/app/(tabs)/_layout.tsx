@@ -1,13 +1,33 @@
 import { Tabs } from "expo-router";
-import { Home, Compass, MapPin, UserRound } from "lucide-react-native";
+import { Home, Luggage, Map, UserRound } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#7E49C2",
-        tabBarInactiveTintColor: "#817493",
-        tabBarStyle: { backgroundColor: "#FFFFFF" },
+        tabBarActiveTintColor: "#7C4DBE",
+        tabBarInactiveTintColor: "#222222",
+        tabBarStyle: {
+          height: 72 + insets.bottom,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 8),
+          width: "100%",
+          alignSelf: "center",
+          backgroundColor: "#FFFFFF",
+          borderTopColor: "#EEE7F5",
+          borderTopWidth: 1,
+          elevation: 8,
+        },
+        tabBarLabelPosition: "below-icon",
+        tabBarLabelStyle: {
+          fontFamily: "Inter",
+          fontSize: 12,
+          fontWeight: "600",
+          marginTop: 3,
+        },
+        tabBarIconStyle: { marginTop: 0 },
         tabBarHideOnKeyboard: true,
       }}
     >
@@ -21,9 +41,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="trips"
         options={{
-          title: "Trips",
-          tabBarIcon: ({ color, size }) => (
-            <Compass color={color} size={size} />
+          title: "Trip",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Luggage
+              color={color}
+              fill={focused ? color : "none"}
+              size={size}
+            />
           ),
         }}
       />
@@ -31,7 +55,7 @@ export default function TabLayout() {
         name="map"
         options={{
           title: "Map",
-          tabBarIcon: ({ color, size }) => <MapPin color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Map color={color} size={size} />,
         }}
       />
       <Tabs.Screen

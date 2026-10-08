@@ -7,6 +7,11 @@ import {
   UserRound,
   Pencil,
   Plus,
+  LockKeyhole,
+  LogOut,
+  Phone,
+  Globe,
+  Ruler,
 } from "lucide-react-native";
 import {
   Screen,
@@ -43,10 +48,14 @@ const titles = {
 };
 function Row({
   title,
+  subtitle,
+  icon,
   onPress,
   disabled,
 }: {
   title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
   onPress: () => void;
   disabled?: boolean;
 }) {
@@ -57,7 +66,20 @@ function Row({
       onPress={onPress}
       disabled={disabled}
     >
-      <Text className="text-base text-ink flex-1">{title}</Text>
+      {icon && <View className="rounded-full bg-lavender p-2">{icon}</View>}
+      <View className="flex-1 gap-1">
+        <Text
+          style={{ fontFamily: "Inter" }}
+          className="text-sm font-semibold text-muted"
+        >
+          {title}
+        </Text>
+        {!!subtitle && (
+          <Text style={{ fontFamily: "Inter", fontSize: 11, color: "#A99AC6" }}>
+            {subtitle}
+          </Text>
+        )}
+      </View>
       <ChevronRight size={20} color="#7E49C2" />
     </Button>
   );
@@ -226,11 +248,19 @@ export default function ProfileScreen() {
           <UserRound size={54} color="#817493" />
         )}
         <View className="flex-1 gap-1">
-          <Text className="text-lg font-bold text-ink">
+          <Text
+            style={{ fontFamily: "Inter" }}
+            className="text-lg font-bold text-ink"
+          >
             {profile?.display_name || user?.email?.split("@")[0] || "Traveller"}
           </Text>
-          <Text className="text-sm text-muted">{user?.email}</Text>
-          <Text className="text-sm text-brand">Explorer</Text>
+          <Text style={{ fontFamily: "Inter" }} className="text-sm text-muted">
+            {user?.email}
+          </Text>
+          {!!profile?.username && <Text style={{ fontFamily: "Inter" }} className="text-sm text-muted">@{profile.username}</Text>}
+          <Text style={{ fontFamily: "Inter" }} className="text-sm text-brand">
+            Explorer
+          </Text>
         </View>
         <Button
           variant="ghost"
@@ -249,24 +279,49 @@ export default function ProfileScreen() {
         </Button>
       )}
       <Message>{notice}</Message>
-      <View>
+      <View className="rounded-xl border border-line bg-white p-3">
         <SectionTitle>Account</SectionTitle>
         <Row
           title="Edit Profile"
+          subtitle="Name, avatar, personal info"
+          icon={<UserRound size={18} color="#7C4DBE" />}
           disabled={unavailable}
           onPress={() => open("edit")}
         />
-        <Row title="Change Password" onPress={() => open("password")} />
-        <Row title="Log Out" onPress={() => open("logout")} />
+        <Row
+          title="Change Password"
+          subtitle="Keep your account secure"
+          icon={<LockKeyhole size={18} color="#7C4DBE" />}
+          onPress={() => open("password")}
+        />
+        <Row
+          title="Log Out"
+          subtitle="Sign out from this device"
+          icon={<LogOut size={18} color="#7C4DBE" />}
+          onPress={() => open("logout")}
+        />
       </View>
-      <SectionTitle>My Preference Profiles</SectionTitle>
+      <View className="gap-1 rounded-xl bg-lavender p-3">
+        <SectionTitle>My Preference Profiles</SectionTitle>
+        <Message>Save your travel styles for faster planning</Message>
+      </View>
       {(profile?.preferences.profiles ?? []).map((item) => (
         <Card key={item.id}>
           <View className="flex-row items-center gap-3">
-            <Text className="text-3xl">{item.emoji}</Text>
+            <Text style={{ fontFamily: "Inter" }} className="text-3xl">
+              {item.emoji}
+            </Text>
             <View className="flex-1 gap-1">
-              <Text className="text-base font-bold text-ink">{item.name}</Text>
-              <Text className="text-sm text-muted">
+              <Text
+                style={{ fontFamily: "Inter" }}
+                className="text-base font-bold text-ink"
+              >
+                {item.name}
+              </Text>
+              <Text
+                style={{ fontFamily: "Inter" }}
+                className="text-sm text-muted"
+              >
                 {item.tags.join(" / ")}
               </Text>
             </View>
@@ -294,25 +349,45 @@ export default function ProfileScreen() {
         onPress={() => router.push("/profile/new")}
       >
         <Plus size={18} color="#7E49C2" />
-        <Text className="text-brand font-semibold">Create New Profile</Text>
+        <Text
+          style={{ fontFamily: "Inter" }}
+          className="text-brand font-semibold"
+        >
+          Create New Profile
+        </Text>
       </Button>
-      <View>
+      <View className="rounded-xl border border-line bg-white p-3">
         <SectionTitle>Emergency &amp; Destination Info</SectionTitle>
+        <Message>Keep important contacts and numbers handy</Message>
         <Row
           title="Emergency Contacts"
+          subtitle="Family, friends, emergency hotline"
+          icon={<Phone size={18} color="#7C4DBE" />}
           disabled={unavailable}
           onPress={() => open("contacts")}
         />
         <Row
           title="Destination Information"
+          subtitle="Embassy, local emergency numbers, health info"
+          icon={<Globe size={18} color="#7C4DBE" />}
           disabled={unavailable}
           onPress={() => open("destination")}
         />
       </View>
-      <View>
-        <SectionTitle>Preferences</SectionTitle>
+      <View className="rounded-xl border border-line bg-white p-3">
+        <SectionTitle>App Settings</SectionTitle>
+        <Message>Personalize your Eggsplore experience</Message>
         <Row
-          title="App Settings"
+          title="Notifications"
+          subtitle="Trip updates, reminders, alerts"
+          icon={<Bell size={18} color="#7C4DBE" />}
+          disabled={unavailable}
+          onPress={() => open("settings")}
+        />
+        <Row
+          title="Units"
+          subtitle="Metric / Imperial"
+          icon={<Ruler size={18} color="#7C4DBE" />}
           disabled={unavailable}
           onPress={() => open("settings")}
         />
@@ -347,7 +422,9 @@ export default function ProfileScreen() {
         {sheet === "settings" && (
           <>
             <View className="flex-row items-center justify-between gap-3">
-              <Text className="flex-1 text-ink">Notification preference</Text>
+              <Text style={{ fontFamily: "Inter" }} className="flex-1 text-ink">
+                Notification preference
+              </Text>
               <Switch
                 accessibilityLabel="Notification preference"
                 value={notifications}
@@ -377,7 +454,8 @@ export default function ProfileScreen() {
         )}
         {sheet === "notifications" && (
           <Message>
-            No notifications yet. Live alerts are planned for Modules C and D.
+            No notifications yet. Your trip updates and reminders will appear
+            here.
           </Message>
         )}
         {sheet === "logout" && (

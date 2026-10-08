@@ -2,6 +2,18 @@
 
 Team: Yii Aik Lui, Anson Wong Leon Sheng, Lee Zhi Wei, Tan Zhi Shing.
 
+## What is Eggsplore?
+
+Eggsplore is a collaborative travel-planning app for groups. It brings trip
+planning, shared decisions, itineraries, maps, and budgeting together so
+travellers can coordinate a trip without juggling separate tools. The product
+is designed to use AI to help suggest destinations and build or adapt
+itineraries around a group's preferences and constraints; some AI features are
+still planned and are not connected in the current app.
+
+See the [full project overview and proposal](docs/PROJECT-PROPOSAL.md) for the
+original problem analysis, feature concepts, design, and technical plan.
+
 Eggsplore is now a React Native app built with Expo, Expo Router, TypeScript,
 NativeWind, and Supabase. It targets Android and iOS, with an optional Expo web
 preview. It does not use Next.js, a WebView wrapper, or HTML screens.
@@ -56,7 +68,9 @@ queries. No new database migration is required by this Expo conversion.
 | Account editing, password change, emergency contact, destination notes, settings                   | Migrated                                             |
 | Preference profiles: create, edit, delete, categories, pace, companions, spending order, interests | Migrated; existing JSON format preserved             |
 | Trip creation, trip list, date filters, basic trip detail                                          | Implemented to replace the old dead Create Trip link |
-| Candidate pool, voting, AI itinerary generation                                                    | Planned: Module B                                    |
+| AI itinerary generation from trip dates, budget, type, and preferences                             | Implemented; requires a Gemini API key in Supabase  |
+| Candidate pool, candidate submission, draft review, and itinerary publishing                       | Implemented; pools and votes are private per user     |
+| Collaborative voting across trip members                                                          | Planned: shared candidate/vote schema and Realtime   |
 | Native Mapbox, Ask AI, weather/flight disruptions                                                  | Planned: Module C; map currently shows a placeholder |
 | Budget, split logic, price estimates, notification delivery                                        | Planned: Module D                                    |
 

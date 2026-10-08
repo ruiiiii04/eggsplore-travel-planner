@@ -69,8 +69,8 @@ eggsplore/
 |   `-- types/styles.d.ts
 |-- assets/
 |   |-- eggsplore-logo.png
-|   |-- home-background.png
-|   `-- home-mascot.png
+|   |-- home-hero-background.png
+|   `-- home-hero-mascot.png
 |-- supabase/
 |   |-- migrations/001_foundation.sql # Original initial schema; unchanged
 |   `-- verify-foundation.sql         # Read-only checks
