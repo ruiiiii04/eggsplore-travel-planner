@@ -245,7 +245,6 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
   };
   const saveNewItem = async () => {
     if (!draftTitle.trim()) { setFormError(addKind === "activity" ? "Enter an activity name." : "Enter a note title."); return; }
-    if (addKind === "activity" && draftDetail.trim() && !draftLocation && (!editingActivity || draftDetail.trim() !== editingActivity.location_name?.trim())) { setFormError("Select a location match or drop a pin before saving."); return; }
     if (addKind === "note" && draftReminderDate && !isValidDate(draftReminderDate)) { setFormError("Enter a valid reminder date as YYYY-MM-DD."); return; }
     if (addKind === "note" && draftReminderDate && !/^([01]\d|2[0-3]):[0-5]\d$/.test(draftReminderTime)) { setFormError("Enter a reminder time in 24-hour format, such as 09:00."); return; }
     if (addKind === "note" && draftReminderDate && new Date(`${draftReminderDate}T${draftReminderTime}:00`).getTime() <= Date.now()) { setFormError("Choose a reminder time in the future."); return; }

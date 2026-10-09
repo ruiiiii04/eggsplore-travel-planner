@@ -555,7 +555,7 @@ function TripMapScreen() {
       >
         <Text style={s.noticeText}>
           These activities are still in your itinerary. Choose Find location to
-          select their exact location or drop a pin.
+          search by place name or full address and select a matching location.
         </Text>
         {tripPlaces.unresolved.map((place) => (
           <View key={place.id} style={{ paddingVertical: 12, gap: 4 }}>

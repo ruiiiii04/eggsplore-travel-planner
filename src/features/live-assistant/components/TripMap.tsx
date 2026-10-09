@@ -1,14 +1,7 @@
-import { View } from "react-native";
-import MapFallback from "./MapFallback";
+import LocationPinPicker from "../../trips/location/LocationPinPicker";
 import type { TripMapProps } from "../types";
 
+// The browser iframe uses the same Leaflet document as the mobile WebView.
 export default function TripMap(props: TripMapProps) {
-  return (
-    <View style={{ flex: 1, paddingTop: 88, paddingBottom: 60 }}>
-      <MapFallback
-        {...props}
-        reason="Browser preview. Open the app on your phone for the interactive map."
-      />
-    </View>
-  );
+  return <LocationPinPicker {...props} />;
 }

@@ -57,13 +57,13 @@ test("location search returns valid identities, addresses, coordinates and categ
   const providerRequest = new URL(n.calls[2]);
   assert.match(providerRequest.searchParams.get("text")!, /Guangzhou/);
 });
-test("missing Geoapify config offers manual pins without a provider call", async () => {
+test("missing Geoapify config explains setup and allows saving without a pin", async () => {
   const n = network();
   const handler = createLocationSearchHandler({ env: (key) => key === "GEOAPIFY_API_KEY" ? undefined : config[key], fetcher: n.fetcher });
   const response = await handler(request());
   assert.equal(response.status, 503);
-  assert.match((await response.json()).error.message, /drop a pin/);
-  assert.equal(n.calls.length, 2);
+  assert.match((await response.json()).error.message, /GEOAPIFY_API_KEY/);
+  assert.equal(n.calls.length, 3);
 });
 test("new locations round-trip through Explore handoff and save their coordinates", () => {
   const value = { provider: "wikipedia", providerId: "wiki:en:123", name: "Temple",
@@ -99,4 +99,50 @@ test("follow-ups are bounded and malformed structured answers are not shown as J
   assert.equal(parseAssistantResponse('{"answer":"truncated').answer, "");
   assert.equal(parseAssistantResponse("Legacy plain text").answer, "Legacy plain text");
   assert.equal(cleanChatText("## History\n**Ancient** temple.\n* Visit respectfully."), "History\nAncient temple.\n\u2022 Visit respectfully.");
+});
+
+test("missing Geoapify key returns selectable Wikipedia locations and rejects invalid pins", async () => {
+  const n = network();
+  const handler = createLocationSearchHandler({
+    env: (key) => key === "GEOAPIFY_API_KEY" ? undefined : config[key],
+    fetcher: async (input, init) => {
+      if (String(input).includes("wikipedia.org")) return Response.json({ query: { pages: [
+        { pageid: 12, title: "Tempozan Harbor Village", coordinates: [{ lat: 34.65, lon: 135.43 }] },
+        { pageid: 13, title: "Ambiguous", pageprops: { disambiguation: "" }, coordinates: [{ lat: 34, lon: 135 }] },
+        { pageid: 14, title: "No location" },
+      ] } });
+      return n.fetcher(input, init);
+    },
+  });
+  const response = await handler(request("fixture", "Tempozan Harbor Village"));
+  assert.equal(response.status, 200);
+  const { places } = await response.json();
+  assert.equal(places.length, 1);
+  assert.equal(places[0].providerId, "wiki:en:12");
+  assert.equal(parseLocation(places[0])?.latitude, 34.65);
+});
+
+test("location queries do not duplicate a city already present in the input", async () => {
+  const n = network();
+  const handler = createLocationSearchHandler({ env: (key) => config[key], fetcher: n.fetcher });
+  await handler(request("fixture", "Hualin Temple, Guangzhou"));
+  assert.equal(new URL(n.calls[2]).searchParams.get("text"), "Hualin Temple, Guangzhou");
+});
+
+test("empty autocomplete falls back to full-address geocoding before Wikipedia", async () => {
+  const n = network();
+  const calls: string[] = [];
+  const handler = createLocationSearchHandler({ env: (key) => config[key], fetcher: async (input, init) => {
+    const url = String(input); calls.push(url);
+    if (url.includes("geocode/autocomplete")) return Response.json({ results: [] });
+    if (url.includes("geocode/search")) return Response.json({ results: [
+      { place_id: "address-match", name: "Harbor Village", formatted: "Osaka, Japan", lat: 34.65, lon: 135.43 },
+    ] });
+    return n.fetcher(input, init);
+  } });
+  const response = await handler(request("fixture", "Harbor Village"));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).places[0].providerId, "address-match");
+  assert.equal(calls.filter((url) => url.includes("geocode/")).length, 2);
+  assert.ok(!calls.some((url) => url.includes("wikipedia.org")));
 });
