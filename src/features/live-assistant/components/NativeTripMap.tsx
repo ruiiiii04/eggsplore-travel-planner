@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -12,11 +12,6 @@ import Svg, { Path } from "react-native-svg";
 import { MapPin, RotateCcw, Utensils } from "lucide-react-native";
 
 import { colors } from "@/styles/theme";
-import {
-  SAMPLE_REGION,
-  crowdColors,
-  sampleCrowd,
-} from "../data/samplePlaces";
 import type { TripMapProps } from "../types";
 
 const pastelMapStyle = [
@@ -56,9 +51,18 @@ export default function NativeTripMap({
   routePlaces = [],
   resetSignal = 0,
   mutedMap = true,
+  center,
 }: TripMapProps) {
   const map = useRef<MapView>(null);
 
+  const [laidOut, setLaidOut] = useState(false);
+  const pointKey = places
+    .map((p) => `${p.id}:${p.latitude}:${p.longitude}`)
+    .join("|");
+  const mapPoints = useMemo(
+    () => places.map((p) => ({ latitude: p.latitude, longitude: p.longitude })),
+    [pointKey],
+  );
   const [ready, setReady] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -74,10 +78,36 @@ export default function NativeTripMap({
   }, [ready, attempt]);
 
   useEffect(() => {
-    if (!ready) return;
-
-    map.current?.animateToRegion(SAMPLE_REGION, 500);
-  }, [resetSignal, ready]);
+    if (!ready || !laidOut) return;
+    if (mapPoints.length === 1) {
+      map.current?.animateToRegion(
+        { ...mapPoints[0], latitudeDelta: 0.025, longitudeDelta: 0.025 },
+        500,
+      );
+    } else if (mapPoints.length > 1) {
+      map.current?.fitToCoordinates(mapPoints, {
+        edgePadding: { top: 100, right: 65, bottom: 85, left: 45 },
+        animated: true,
+      });
+    } else {
+      map.current?.animateToRegion(
+        {
+          latitude: center?.latitude ?? 15,
+          longitude: center?.longitude ?? 105,
+          latitudeDelta: center ? 0.12 : 100,
+          longitudeDelta: center ? 0.12 : 100,
+        },
+        500,
+      );
+    }
+  }, [
+    resetSignal,
+    ready,
+    laidOut,
+    mapPoints,
+    center?.latitude,
+    center?.longitude,
+  ]);
 
   const retry = () => {
     setReady(false);
@@ -92,16 +122,22 @@ export default function NativeTripMap({
         key={attempt}
         ref={map}
         style={styles.map}
-        initialRegion={SAMPLE_REGION}
+        initialRegion={
+          mapPoints[0]
+            ? { ...mapPoints[0], latitudeDelta: 0.05, longitudeDelta: 0.05 }
+            : {
+                latitude: 15,
+                longitude: 105,
+                latitudeDelta: 100,
+                longitudeDelta: 100,
+              }
+        }
+        onLayout={() => setLaidOut(true)}
         mapType={
-          Platform.OS === "ios" && mutedMap
-            ? "mutedStandard"
-            : "standard"
+          Platform.OS === "ios" && mutedMap ? "mutedStandard" : "standard"
         }
         customMapStyle={
-          Platform.OS === "android" && mutedMap
-            ? pastelMapStyle
-            : undefined
+          Platform.OS === "android" && mutedMap ? pastelMapStyle : undefined
         }
         onMapReady={() => {
           setReady(true);
@@ -126,8 +162,9 @@ export default function NativeTripMap({
 
         {places.map((place) => {
           const selected = selectedPlaceId === place.id;
-          const markerColor = crowdColors[sampleCrowd(place)];
-          const isFoodPlace = place.tags.includes("Foodie");
+          const markerColor = "#9365BC";
+          const isFoodPlace =
+            place.tags.includes("Foodie") || place.tags.includes("Food");
 
           return (
             <Marker
@@ -163,10 +200,7 @@ export default function NativeTripMap({
                   />
                 </Svg>
 
-                <View
-                  pointerEvents="none"
-                  style={styles.markerIcon}
-                >
+                <View pointerEvents="none" style={styles.markerIcon}>
                   {isFoodPlace ? (
                     <Utensils size={20} color={colors.white} />
                   ) : (
@@ -189,8 +223,8 @@ export default function NativeTripMap({
       {timedOut && !ready && (
         <View style={styles.notice}>
           <Text accessibilityRole="alert" style={styles.text}>
-            The map is taking longer than expected. Check your
-            connection and try again.
+            The map is taking longer than expected. Check your connection and
+            try again.
           </Text>
 
           <TouchableOpacity

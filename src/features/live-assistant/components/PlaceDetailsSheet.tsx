@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,80 +11,72 @@ import {
   View,
 } from "react-native";
 import type { GestureResponderHandlers } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Camera,
+  CalendarDays,
   ChevronUp,
-  Clock3,
-  Footprints,
-  Leaf,
   MapPin,
   Plus,
   Sparkles,
-  Star,
+  X,
+  RotateCcw,
 } from "lucide-react-native";
-
-import { BottomSheet } from "@/components/ui/BottomSheet";
-import { placePhotos, samplePlaces } from "../data/samplePlaces";
-import type { SamplePlace } from "../types";
+import { useAuth } from "@/features/auth/useAuth";
+import { usePlaceDetails } from "../hooks/usePlaceDetails";
+import AssistantChat from "./AssistantChat";
+import type { PlacePhoto, SamplePlace } from "../types";
 
 type Props = {
   place: SamplePlace;
   expanded: boolean;
   onToggle: () => void;
   onAdd: () => void;
-  onSelectPlace: (place: SamplePlace) => void;
-
-  // NEW: resize gestures provided by MapScreen.
   dragHandlers?: GestureResponderHandlers;
 };
 
-function Photo({ place }: { place: SamplePlace }) {
+// CHANGED: no gallery of other places and no onSelectPlace photo action.
+function Photo({
+  photo,
+  large = false,
+}: {
+  photo: PlacePhoto;
+  large?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
-  const photo = placePhotos[place.id];
-
-  if (!photo || failed) {
-    return (
-      <View style={s.photoFallback}>
-        <Camera size={24} color="#A988C6" />
-      </View>
-    );
-  }
-
-  return (
+  return failed ? (
+    <View style={s.photoFallback}>
+      <Camera size={28} color="#A988C6" />
+      <Text style={s.small}>Photo unavailable</Text>
+    </View>
+  ) : (
     <Image
-      source={{ uri: photo.uri }}
-      resizeMode="cover"
+      source={{ uri: photo.url }}
+      resizeMode={large ? "contain" : "cover"}
       style={StyleSheet.absoluteFill}
-      accessibilityLabel={place.name}
+      accessibilityLabel={photo.caption}
       onError={() => setFailed(true)}
     />
   );
 }
-
 export default function PlaceDetailsSheet({
   place,
   expanded,
   onToggle,
   onAdd,
-  onSelectPlace,
   dragHandlers,
 }: Props) {
-  const [dialog, setDialog] = useState<"ai" | "photos" | null>(null);
+  const { user } = useAuth();
+  const { data, loading, error, retry } = usePlaceDetails(place.id);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [viewing, setViewing] = useState<PlacePhoto | null>(null);
   const [linkError, setLinkError] = useState(false);
-
-  const gallery = [
-    place,
-    ...samplePlaces.filter((item) => item.id !== place.id),
-  ];
-
   const openLink = (url: string) => {
     setLinkError(false);
     void Linking.openURL(url).catch(() => setLinkError(true));
   };
-
   return (
     <View style={s.sheet}>
-      {/* CHANGED: drag this handle area to resize the panel. */}
       <View style={s.handleArea} {...dragHandlers}>
         <TouchableOpacity
           onPress={onToggle}
@@ -98,7 +92,6 @@ export default function PlaceDetailsSheet({
           <View style={s.handle} />
         </TouchableOpacity>
       </View>
-
       {expanded ? (
         <>
           <ScrollView
@@ -106,101 +99,179 @@ export default function PlaceDetailsSheet({
             contentContainerStyle={s.content}
             showsVerticalScrollIndicator={false}
           >
-            <View style={s.photos}>
-              {gallery.map((item, index) => (
-                <TouchableOpacity
-                  key={item.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Explore ${item.name}`}
-                  activeOpacity={0.85}
-                  style={[s.photo, { flex: index === 0 ? 2.6 : 1 }]}
-                  onPress={() => onSelectPlace(item)}
-                >
-                  <Photo place={item} />
-                </TouchableOpacity>
-              ))}
-
-              <TouchableOpacity
-                style={s.morePhotos}
-                accessibilityRole="button"
-                accessibilityLabel="Osaka photo information and credits"
-                onPress={() => setDialog("photos")}
+            {/* CHANGED: photos and article text are fetched for this exact place. */}
+            {loading ? (
+              <View style={s.loading}>
+                <ActivityIndicator color="#7E49C2" />
+                <Text style={s.small}>Loading {place.name}…</Text>
+              </View>
+            ) : data?.photos.length ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.photos}
               >
-                <Camera size={17} color="#8050B2" />
-                <Text style={s.moreText}>3</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={s.galleryNote}>
-              Osaka photos · tap to explore
-            </Text>
-
+                {data.photos.map((photo) => (
+                  <View key={photo.id} style={s.photoCard}>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open photo of ${place.name}`}
+                      style={s.photo}
+                      onPress={() => {
+                        setLinkError(false);
+                        setViewing(photo);
+                      }}
+                    >
+                      <Photo photo={photo} />
+                      <View style={s.photoBadge}>
+                        <Camera size={14} color="white" />
+                        <Text style={s.photoBadgeText}>View</Text>
+                      </View>
+                    </TouchableOpacity>
+                    {/* Attribution stays visible beside the thumbnail, not just in a modal. */}
+                    <Text style={s.credit}>
+                      {photo.author} · {photo.license} · cropped preview
+                    </Text>
+                    <View style={s.links}>
+                      <TouchableOpacity
+                        accessibilityRole="link"
+                        onPress={() => openLink(photo.sourceUrl)}
+                      >
+                        <Text style={s.link}>Photo source</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        accessibilityRole="link"
+                        onPress={() => openLink(photo.licenseUrl)}
+                      >
+                        <Text style={s.link}>License</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={s.photoEmpty}>
+                <Camera size={24} color="#A988C6" />
+                <Text style={s.small}>
+                  {data?.photoNotice ?? "Photo unavailable"}
+                </Text>
+              </View>
+            )}
             <View style={s.titleRow}>
-              <MapPin size={24} color="#8050B2" fill="#EEE4F8" />
+              <MapPin size={23} color="#8050B2" />
               <Text style={s.title}>{place.name}</Text>
             </View>
-
-            <Text style={s.demo}>
-              DEMO DETAILS · values below are illustrative
-            </Text>
-
-            <View style={s.row}>
-              <Star size={17} color="#FFB520" fill="#FFB520" />
-              <Text style={s.strong}>4.7</Text>
-              <Text style={s.small}>(1.2k reviews)</Text>
-              <Text style={s.dot}>•</Text>
-              <Clock3 size={16} color="#8050B2" />
-              <Text style={s.strong}>Open</Text>
-              <Text style={s.small}>· Closes 9 PM</Text>
-            </View>
-
-            <View style={s.row}>
-              <Footprints size={17} color="#8050B2" />
-              <Text style={s.strong}>1.2 km</Text>
-              <Text style={s.small}>· 8 min walk</Text>
-            </View>
-
+            <Text style={s.small}>{place.area}</Text>
             <View style={s.tags}>
               {place.tags.map((tag) => (
                 <View key={tag} style={s.tag}>
-                  <MapPin size={12} color="#9477AA" />
                   <Text style={s.tagText}>{tag}</Text>
                 </View>
               ))}
-
-              <View style={s.tag}>
-                <Camera size={12} color="#9477AA" />
-                <Text style={s.tagText}>Photo Spot</Text>
+            </View>
+            {error && (
+              <View style={s.errorBox}>
+                <Text accessibilityRole="alert" style={s.error}>
+                  {error}
+                </Text>
+                <TouchableOpacity
+                  style={s.retry}
+                  accessibilityRole="button"
+                  onPress={retry}
+                >
+                  <RotateCcw size={16} color="#8050B2" />
+                  <Text style={s.link}>Retry details</Text>
+                </TouchableOpacity>
               </View>
-            </View>
-
-            <View style={s.insight}>
-              <Leaf size={19} color="#69AD7E" />
-              <Text style={s.insightText}>
-                Demo tip: visit before lunch for a quieter stop.
+            )}
+            {data && (
+              <>
+                {data.sourceLanguage === "ja" && (
+                  <Text style={s.note}>
+                    Source available in Japanese. Ask AI to explain it in your
+                    language.
+                  </Text>
+                )}
+                <Text style={s.description}>
+                  {data.description ||
+                    "No description is available from this source."}
+                </Text>
+                <View style={s.links}>
+                  <TouchableOpacity
+                    accessibilityRole="link"
+                    onPress={() => openLink(data.sourceUrl)}
+                  >
+                    <Text style={s.link}>
+                      Wikipedia contributors · excerpt{" "}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="link"
+                    onPress={() => openLink(data.textLicenseUrl)}
+                  >
+                    <Text style={s.link}>Text: CC BY-SA 4.0</Text>
+                  </TouchableOpacity>
+                </View>
+                {data.photoNotice && (
+                  <TouchableOpacity
+                    style={s.retry}
+                    accessibilityRole="button"
+                    onPress={retry}
+                  >
+                    <RotateCcw size={16} color="#8050B2" />
+                    <Text style={s.link}>Retry photo</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+            {place.description ? (
+              <View style={{ gap: 4 }}>
+                <Text style={s.description}>{place.description}</Text>
+              </View>
+            ) : null}
+            {!loading && !data && (
+              <Text style={s.description}>
+                Online information could not be loaded. You can retry or ask the
+                assistant for general travel advice.
               </Text>
-            </View>
+            )}
+            {/* CHANGED: remove fabricated reviews, opening hours, walking time and crowd advice. */}
+            <Text style={s.note}>
+              Live opening hours, ratings and walking directions are not
+              available yet.
+            </Text>
+            {linkError && (
+              <Text style={s.error}>
+                Could not open the link. Please try again.
+              </Text>
+            )}
           </ScrollView>
-
           <View style={s.actions}>
             <TouchableOpacity
               style={s.ask}
               accessibilityRole="button"
-              onPress={() => setDialog("ai")}
+              onPress={() => setChatOpen(true)}
               activeOpacity={0.8}
             >
               <Sparkles size={17} color="white" />
               <Text style={s.askText}>Ask AI</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={s.add}
               accessibilityRole="button"
               onPress={onAdd}
               activeOpacity={0.8}
             >
-              <Plus size={19} color="#8050B2" />
-              <Text style={s.addText}>Add to Itinerary</Text>
+              <>
+                {place.tripId ? (
+                  <CalendarDays size={19} color="#8050B2" />
+                ) : (
+                  <Plus size={19} color="#8050B2" />
+                )}
+              </>
+              <Text style={s.addText}>
+                {place.tripId ? "View itinerary" : "Add to Itinerary"}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -218,68 +289,66 @@ export default function PlaceDetailsSheet({
           <ChevronUp size={20} color="#8050B2" />
         </TouchableOpacity>
       )}
-
-      <BottomSheet
-        visible={dialog !== null}
-        title={
-          dialog === "photos"
-            ? "Osaka photo credits"
-            : `Ask AI · ${place.name}`
-        }
-        onClose={() => setDialog(null)}
-      >
-        {dialog === "photos" ? (
-          <>
-            <Text style={s.dialogText}>
-              These photos show the three sample Osaka places.
-              Thumbnails are cropped to fit; they are not all photos
-              of the selected place.
-            </Text>
-
-            {samplePlaces.map((item) => {
-              const photo = placePhotos[item.id];
-
-              if (!photo) return null;
-
-              return (
-                <View key={item.id} style={{ gap: 4 }}>
-                  <Text style={s.strong}>{item.name}</Text>
-                  <Text style={s.small}>{photo.credit}</Text>
-
-                  <TouchableOpacity
-                    accessibilityRole="link"
-                    onPress={() => openLink(photo.source)}
-                  >
-                    <Text style={s.creditLink}>Photo source</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    accessibilityRole="link"
-                    onPress={() => openLink(photo.license)}
-                  >
-                    <Text style={s.creditLink}>Photo license</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-
-            {linkError && (
-              <Text style={s.dialogText}>
-                Could not open the link. Please try again.
+      {/* NEW: real Gemini chat; close/unmount clears memory and cancels the client request. */}
+      {chatOpen && (
+        <AssistantChat
+          key={`${user?.id ?? "signed-out"}:${place.id}`}
+          place={place}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
+      {/* NEW: tapping a photo opens it, without changing the selected location. */}
+      {viewing && (
+        <Modal
+          visible
+          animationType="fade"
+          onRequestClose={() => setViewing(null)}
+        >
+          <SafeAreaView style={s.viewer}>
+            <View style={s.viewerHeader}>
+              <Text style={s.viewerTitle}>{place.name}</Text>
+              <TouchableOpacity
+                style={s.close}
+                accessibilityRole="button"
+                accessibilityLabel="Close photo"
+                onPress={() => setViewing(null)}
+              >
+                <X size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            <View style={s.viewerImage}>
+              <Photo key={viewing.id} photo={viewing} large />
+            </View>
+            <ScrollView
+              style={s.viewerCredits}
+              contentContainerStyle={{ padding: 18, gap: 6 }}
+            >
+              <Text style={s.viewerText}>{viewing.caption}</Text>
+              <Text style={s.viewerText}>
+                {viewing.author} · {viewing.license}
               </Text>
-            )}
-          </>
-        ) : (
-          <Text style={s.dialogText}>
-            Ask AI about {place.name} will be connected in a later
-            milestone. No AI request has been sent.
-          </Text>
-        )}
-      </BottomSheet>
+              <TouchableOpacity
+                accessibilityRole="link"
+                onPress={() => openLink(viewing.sourceUrl)}
+              >
+                <Text style={s.viewerLink}>Photo source and attribution</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="link"
+                onPress={() => openLink(viewing.licenseUrl)}
+              >
+                <Text style={s.viewerLink}>Photo license</Text>
+              </TouchableOpacity>
+              {linkError && (
+                <Text style={s.viewerText}>Could not open the link.</Text>
+              )}
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
+      )}
     </View>
   );
 }
-
 const s = StyleSheet.create({
   sheet: {
     flex: 1,
@@ -290,46 +359,53 @@ const s = StyleSheet.create({
     borderColor: "#EEE5F5",
     overflow: "hidden",
   },
-
-  // NEW: stable, larger handle area.
   handleArea: { flexShrink: 0 },
-  handleButton: {
-    height: 32,
+  handleButton: { height: 32, alignItems: "center", justifyContent: "center" },
+  handle: { width: 34, height: 4, borderRadius: 2, backgroundColor: "#C5A0E4" },
+  detailsScroll: { flex: 1, minHeight: 0 },
+  content: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
+  loading: {
+    minHeight: 100,
     alignItems: "center",
     justifyContent: "center",
+    gap: 10,
   },
-  handle: {
-    width: 34,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#C5A0E4",
-  },
-
-  // NEW: content shrinks as the panel is dragged down.
-  detailsScroll: { flex: 1, minHeight: 0 },
-
-  content: { paddingHorizontal: 16, paddingBottom: 8, gap: 6 },
-  photos: { flexDirection: "row", height: 72, gap: 8 },
+  photos: { gap: 12 },
+  photoCard: { width: 260, gap: 3 },
   photo: {
+    height: 125,
     overflow: "hidden",
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: "#EEE5F6",
   },
   photoFallback: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
   },
-  morePhotos: {
-    width: 32,
-    borderRadius: 12,
-    backgroundColor: "#F0E6FB",
+  photoEmpty: {
+    minHeight: 75,
+    padding: 12,
+    gap: 8,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#F3EDF9",
+  },
+  photoBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    padding: 6,
+    borderRadius: 12,
+    backgroundColor: "#4E2867",
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
   },
-  moreText: { color: "#8050B2", fontWeight: "700" },
-  galleryNote: { fontSize: 9, color: "#8A789D" },
+  photoBadgeText: { color: "white", fontSize: 10 },
+  credit: { fontSize: 10, color: "#817493", lineHeight: 14 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   title: {
     flex: 1,
@@ -338,41 +414,34 @@ const s = StyleSheet.create({
     color: "#4B285F",
     lineHeight: 29,
   },
-  demo: { fontSize: 8, color: "#887498", letterSpacing: 0.5 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    flexWrap: "wrap",
-  },
-  strong: { color: "#624375", fontSize: 12, fontWeight: "600" },
-  small: { color: "#86718F", fontSize: 11 },
-  dot: { color: "#DBCAE9" },
+  small: { color: "#86718F", fontSize: 11, lineHeight: 16 },
   tags: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
   tag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     backgroundColor: "#F3EDF9",
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: 14,
   },
-  tagText: { color: "#9279A6", fontSize: 10 },
-  insight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#F3EDF9",
-    padding: 7,
-    borderRadius: 7,
-  },
-  insightText: {
-    color: "#553B6A",
+  tagText: { color: "#9279A6", fontSize: 11 },
+  description: { color: "#553B6A", fontSize: 13, lineHeight: 21 },
+  note: {
+    color: "#817493",
     fontSize: 11,
-    flex: 1,
     lineHeight: 16,
+    backgroundColor: "#F3EDF9",
+    padding: 9,
+    borderRadius: 8,
   },
+  links: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  link: {
+    color: "#8050B2",
+    fontSize: 11,
+    textDecorationLine: "underline",
+    paddingVertical: 5,
+  },
+  errorBox: { gap: 6 },
+  error: { color: "#9F254B", fontSize: 12, lineHeight: 18 },
+  retry: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 36 },
   actions: {
     flexShrink: 0,
     paddingHorizontal: 16,
@@ -381,7 +450,7 @@ const s = StyleSheet.create({
     gap: 7,
   },
   ask: {
-    minHeight: 42,
+    minHeight: 44,
     backgroundColor: "#864DBF",
     borderRadius: 24,
     flexDirection: "row",
@@ -391,7 +460,7 @@ const s = StyleSheet.create({
   },
   askText: { color: "white", fontWeight: "600", fontSize: 14 },
   add: {
-    minHeight: 40,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: "#C9A5E8",
     borderRadius: 24,
@@ -415,11 +484,22 @@ const s = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  dialogText: { color: "#553B6A", fontSize: 14, lineHeight: 22 },
-  creditLink: {
-    color: "#8050B2",
+  viewer: { flex: 1, backgroundColor: "#20152B" },
+  viewerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  viewerTitle: { flex: 1, color: "white", fontSize: 18, fontWeight: "600" },
+  close: { padding: 14 },
+  viewerImage: { flex: 1 },
+  viewerCredits: { maxHeight: "32%" },
+  viewerText: { color: "#E0D3EC", fontSize: 12, lineHeight: 18 },
+  viewerLink: {
+    color: "#D7BDED",
     fontSize: 12,
+    paddingVertical: 6,
     textDecorationLine: "underline",
-    paddingVertical: 5,
   },
 });

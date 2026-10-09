@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PanResponder,
   ScrollView,
@@ -8,6 +8,12 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import { useAuth } from "@/features/auth/useAuth";
+import { useTrips } from "@/features/trips/useTrips";
+import { getRecentTripId, rememberTrip } from "@/features/trips/recentTrip";
+import { tripStatus } from "@/features/trips/model";
+import { useTripPlaces } from "./hooks/useTripPlaces";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Bell,
@@ -26,59 +32,71 @@ import {
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import TripMap from "./components/TripMap";
 import PlaceDetailsSheet from "./components/PlaceDetailsSheet";
-import { samplePlaces, crowdColors } from "./data/samplePlaces";
+import { useExplorePlaces } from "./hooks/useExplorePlaces";
 
-const vibes = [
-  { name: "All Vibes", icon: Sparkles },
-  { name: "Foodie", icon: Utensils },
-  { name: "Tranquility", icon: Leaf },
-  { name: "Heritage", icon: Landmark },
-];
-
-// CHANGED: dropdown options.
-// Replace with the signed-in user's trips when that integration is ready.
-const demoTrips = [
-  {
-    id: "osaka-highlights",
-    name: "Osaka Highlights",
-    subtitle: "Demo trip · 2 stops",
-    placeIds: [
-      "sample-osaka-castle",
-      "sample-nakanoshima-park",
-    ],
-  },
-  {
-    id: "osaka-food-and-culture",
-    name: "Osaka Food & Culture",
-    subtitle: "Demo trip · 2 stops",
-    placeIds: [
-      "sample-kuromon-market",
-      "sample-osaka-castle",
-    ],
-  },
-];
-
+// CHANGED: remount user-scoped map state after an account change.
 export default function MapScreen() {
+  const { user } = useAuth();
+  return <TripMapScreen key={user?.id ?? "signed-out"} />;
+}
+function TripMapScreen() {
   const { height, fontScale } = useWindowDimensions();
 
   const [mode, setMode] = useState<"My Trip" | "Explore">("My Trip");
-  const [vibe, setVibe] = useState("All Vibes");
-  const [selectedId, setSelectedId] = useState(samplePlaces[0].id);
+  const [vibe, setVibe] = useState("All");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [muted, setMuted] = useState(true);
   const [reset, setReset] = useState(0);
 
   // NEW: trip dropdown state.
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
-  const [activeTripId, setActiveTripId] = useState(demoTrips[0].id);
+  const [activeTripId, setActiveTripId] = useState<string | null>(null);
 
   const [notice, setNotice] = useState<{
     title: string;
     text: string;
   } | null>(null);
 
+  // CHANGED: same RLS-backed trip list and recent-trip preference as Trips.
+  const {
+    trips,
+    loading: tripsLoading,
+    error: tripsError,
+    refresh,
+  } = useTrips();
+  const [recentId, setRecentId] = useState<string | null>(null);
+  const [missingOpen, setMissingOpen] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void getRecentTripId()
+        .then((id) => {
+          if (active) {
+            setRecentId(id);
+            setActiveTripId(null);
+          }
+        })
+        .catch(() => {});
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
   const activeTrip =
-    demoTrips.find((trip) => trip.id === activeTripId) ?? demoTrips[0];
+    trips.find((trip) => trip.id === activeTripId) ??
+    trips.find((trip) => trip.id === recentId) ??
+    trips.find((trip) => tripStatus(trip) === "Live") ??
+    trips[0];
+  const tripPlaces = useTripPlaces(activeTrip?.id ?? null);
+  const explore = useExplorePlaces(
+    mode === "Explore" ? (activeTrip?.id ?? null) : null,
+  );
+  useEffect(() => {
+    setSelectedId(null);
+    setVibe("All");
+    setMissingOpen(false);
+  }, [activeTrip?.id]);
 
   // NEW: draggable panel state.
   const collapsedHeight = 80 + Math.max(0, fontScale - 1) * 24;
@@ -114,9 +132,7 @@ export default function MapScreen() {
             ? false
             : draggedHeight >= midpoint;
 
-      const nextHeight = shouldExpand
-        ? expandedHeight
-        : collapsedHeight;
+      const nextHeight = shouldExpand ? expandedHeight : collapsedHeight;
 
       currentHeight.current = nextHeight;
       setSheetHeight(nextHeight);
@@ -127,17 +143,14 @@ export default function MapScreen() {
       onStartShouldSetPanResponder: () => false,
 
       onMoveShouldSetPanResponderCapture: (_, gesture) =>
-        Math.abs(gesture.dy) > 6 &&
-        Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
 
       onPanResponderGrant: () => {
         dragStartHeight.current = currentHeight.current;
       },
 
       onPanResponderMove: (_, gesture) => {
-        const nextHeight = clampHeight(
-          dragStartHeight.current - gesture.dy,
-        );
+        const nextHeight = clampHeight(dragStartHeight.current - gesture.dy);
 
         currentHeight.current = nextHeight;
         setSheetHeight(nextHeight);
@@ -154,15 +167,33 @@ export default function MapScreen() {
   }, [collapsedHeight, expandedHeight]);
 
   // CHANGED: My Trip shows the selected trip's stops.
-  const source =
-    mode === "My Trip"
-      ? samplePlaces.filter((place) =>
-          activeTrip.placeIds.includes(place.id),
-        )
-      : samplePlaces;
+  const source = mode === "My Trip" ? tripPlaces.places : explore.places;
 
+  const categories = Array.from(
+    new Set([
+      ...source.flatMap((place) => place.tags),
+      ...(mode === "My Trip"
+        ? tripPlaces.unresolved.flatMap((place) => place.tags)
+        : []),
+    ]),
+  ).sort();
+  const vibes = [
+    { name: "All", icon: Sparkles },
+    ...categories.map((name) => ({
+      name,
+      icon:
+        name === "Food" || name === "Foodie"
+          ? Utensils
+          : name === "Attraction" || name === "Heritage"
+            ? Landmark
+            : name === "Tranquility" || name === "Nature"
+              ? Leaf
+              : MapPin,
+    })),
+  ];
+  const effectiveVibe = categories.includes(vibe) ? vibe : "All";
   const visible = source.filter(
-    (place) => vibe === "All Vibes" || place.tags.includes(vibe),
+    (place) => effectiveVibe === "All" || place.tags.includes(effectiveVibe),
   );
 
   const selected =
@@ -180,23 +211,23 @@ export default function MapScreen() {
           style={s.trip}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel={`Choose trip. Current trip: ${activeTrip.name}`}
+          accessibilityLabel={`Choose trip. Current trip: ${activeTrip?.title ?? "No trip selected"}`}
           accessibilityState={{ expanded: tripMenuOpen }}
           onPress={() => setTripMenuOpen((value) => !value)}
         >
           <MapPin size={18} color="#7E49C2" />
 
           <Text style={s.tripText} numberOfLines={1}>
-            {activeTrip.name}
+            {tripsLoading
+              ? "Loading trips…"
+              : (activeTrip?.title ?? "Choose a trip")}
           </Text>
 
           <ChevronDown
             size={18}
             color="#61368B"
             style={{
-              transform: [
-                { rotate: tripMenuOpen ? "180deg" : "0deg" },
-              ],
+              transform: [{ rotate: tripMenuOpen ? "180deg" : "0deg" }],
             }}
           />
         </TouchableOpacity>
@@ -218,44 +249,50 @@ export default function MapScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* NEW: selectable demo trips. */}
+      {/* CHANGED: selectable saved trips. */}
       {tripMenuOpen && (
         <View style={s.tripMenu}>
           <Text style={s.tripMenuHeading}>Choose a trip</Text>
 
-          {demoTrips.map((trip) => {
-            const active = trip.id === activeTripId;
+          <ScrollView style={{ maxHeight: 150 }}>
+            {trips.map((trip) => {
+              const active = trip.id === activeTrip?.id;
 
-            return (
-              <TouchableOpacity
-                key={trip.id}
-                style={[
-                  s.tripOption,
-                  active && s.tripOptionActive,
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => {
-                  setActiveTripId(trip.id);
-                  setSelectedId(trip.placeIds[0]);
-                  setMode("My Trip");
-                  setVibe("All Vibes");
-                  setExpanded(true);
-                  setReset((value) => value + 1);
-                  setTripMenuOpen(false);
-                }}
-              >
-                <View style={s.tripOptionLabels}>
-                  <Text style={s.tripOptionTitle}>{trip.name}</Text>
-                  <Text style={s.tripOptionSubtitle}>
-                    {trip.subtitle}
-                  </Text>
-                </View>
+              return (
+                <TouchableOpacity
+                  key={trip.id}
+                  style={[s.tripOption, active && s.tripOptionActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => {
+                    setActiveTripId(trip.id);
+                    setSelectedId(null);
+                    void rememberTrip(trip.id).catch(() => {});
+                    setVibe("All");
+                    setExpanded(true);
+                    setReset((value) => value + 1);
+                    setTripMenuOpen(false);
+                  }}
+                >
+                  <View style={s.tripOptionLabels}>
+                    <Text style={s.tripOptionTitle}>{trip.title}</Text>
+                    <Text style={s.tripOptionSubtitle}>
+                      {[trip.destination, tripStatus(trip)]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </Text>
+                  </View>
 
-                {active && <Check size={20} color="#7E49C2" />}
-              </TouchableOpacity>
-            );
-          })}
+                  {active && <Check size={20} color="#7E49C2" />}
+                </TouchableOpacity>
+              );
+            })}
+            {!tripsLoading && !trips.length && (
+              <Text style={s.emptyText}>
+                No trips yet. Create one from Home.
+              </Text>
+            )}
+          </ScrollView>
         </View>
       )}
 
@@ -266,10 +303,11 @@ export default function MapScreen() {
         contentContainerStyle={s.vibes}
       >
         {vibes.map(({ name, icon: Icon }) => {
-          const active = vibe === name;
-          const count = source.filter((place) =>
-            place.tags.includes(name),
-          ).length;
+          const active = effectiveVibe === name;
+          const count = [
+            ...source,
+            ...(mode === "My Trip" ? tripPlaces.unresolved : []),
+          ].filter((place) => place.tags.includes(name)).length;
 
           return (
             <TouchableOpacity
@@ -288,23 +326,72 @@ export default function MapScreen() {
 
               <Text style={[s.chipText, active && s.white]}>
                 {name}
-                {name !== "All Vibes" ? ` · ${count}` : ""}
+                {name !== "All" ? ` · ${count}` : ""}
               </Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
+      {tripsError || (mode === "My Trip" ? tripPlaces.error : explore.error) ? (
+        <TouchableOpacity
+          style={s.status}
+          onPress={() => {
+            refresh();
+            if (mode === "My Trip") tripPlaces.retry();
+            else explore.retry();
+          }}
+        >
+          <Text style={s.emptyText}>
+            {tripsError ||
+              (mode === "My Trip" ? tripPlaces.error : explore.error)}{" "}
+            Tap to retry.
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+      {mode === "My Trip" && activeTrip && (
+        <View style={s.status}>
+          <Text style={s.tripOptionSubtitle}>
+            {tripPlaces.loading ? "Finding itinerary locations… · " : ""}
+            {tripPlaces.places.length} mapped · {tripPlaces.unresolved.length}{" "}
+            without pins
+          </Text>
+          {tripPlaces.unresolved.length > 0 && (
+            <TouchableOpacity onPress={() => setMissingOpen(true)}>
+              <Text style={s.link}>View places without pins</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {mode === "Explore" && (
+        <Text
+          style={[
+            s.tripOptionSubtitle,
+            { paddingHorizontal: 16, paddingBottom: 6 },
+          ]}
+        >
+          {explore.loading
+            ? "Finding places to explore…"
+            : activeTrip
+              ? `${explore.places.length} places near ${explore.city || activeTrip.destination || "your destination"}`
+              : "Choose a trip to explore its destination."}
+        </Text>
+      )}
       <View style={s.mapArea}>
         <TripMap
           places={visible}
+          center={
+            mode === "Explore"
+              ? (explore.center ?? tripPlaces.places[0])
+              : tripPlaces.places[0]
+          }
           selectedPlaceId={selected?.id ?? null}
           onSelectPlace={(place) => {
             setSelectedId(place.id);
             setExpanded(true);
             setTripMenuOpen(false);
           }}
-          routePlaces={mode === "My Trip" ? visible : []}
+          routePlaces={[]}
           resetSignal={reset}
           mutedMap={muted}
         />
@@ -319,17 +406,14 @@ export default function MapScreen() {
                 activeOpacity={0.8}
                 onPress={() => {
                   setMode(item);
+                  setSelectedId(null);
+                  setVibe("All");
                   setExpanded(true);
                   setTripMenuOpen(false);
                 }}
-                style={[
-                  s.segmentButton,
-                  mode === item && s.segmentActive,
-                ]}
+                style={[s.segmentButton, mode === item && s.segmentActive]}
               >
-                <Text
-                  style={[s.segmentText, mode === item && s.white]}
-                >
+                <Text style={[s.segmentText, mode === item && s.white]}>
                   {item}
                 </Text>
               </TouchableOpacity>
@@ -360,7 +444,7 @@ export default function MapScreen() {
           <TouchableOpacity
             style={s.round}
             accessibilityRole="button"
-            accessibilityLabel="Recenter on Osaka"
+            accessibilityLabel="Show all visible places"
             onPress={() => setReset((value) => value + 1)}
           >
             <Navigation size={25} color="#7745AD" />
@@ -382,64 +466,137 @@ export default function MapScreen() {
           accessibilityRole="button"
           onPress={() =>
             showNotice(
-              "Demo map legend",
-              "Activity colours are illustrative, not live crowd measurements. The dashed purple line connects sample stops; it is not a calculated walking route.",
+              "Map legend",
+              "My Trip shows planned stops. Explore suggests nearby attractions outside your itinerary. Purple pins mark places; tap a pin for details.",
             )
           }
         >
-          <Text style={s.demo}>DEMO</Text>
-
-          {Object.entries(crowdColors).map(([label, color]) => (
-            <View key={label} style={s.legendItem}>
-              <MapPin size={15} color={color} fill={color} />
-              <Text style={s.legendText}>{label}</Text>
-            </View>
-          ))}
+          <Text style={s.demo}>
+            {mode === "Explore" ? "EXPLORE" : "PLANNED STOPS"}
+          </Text>
+          <Text style={s.legendText}>Tap a pin for details</Text>
         </TouchableOpacity>
       </View>
 
       {selected ? (
         // CHANGED: panel height follows the user's drag.
         <View style={{ height: sheetHeight, flexShrink: 0 }}>
+          {/* CHANGED: photos no longer select other places. */}
           <PlaceDetailsSheet
-            key={selected.id}
+            key={JSON.stringify([
+              selected.id,
+              selected.name,
+              selected.area,
+              selected.description,
+              selected.latitude,
+              selected.longitude,
+            ])}
             place={selected}
             expanded={expanded}
             onToggle={() => setExpanded((value) => !value)}
             dragHandlers={sheetPanResponder.panHandlers}
-            onSelectPlace={(place) => {
-              setSelectedId(place.id);
-              setMode("Explore");
-              setVibe("All Vibes");
-              setExpanded(true);
-              setTripMenuOpen(false);
+            onAdd={() => {
+              if (selected.tripId)
+                router.push({
+                  pathname: "/trips/[id]/itinerary",
+                  params: { id: selected.tripId },
+                });
+              else
+                showNotice(
+                  "Add to itinerary",
+                  `${selected.name} is selected. Adding Explore places to an itinerary is not connected yet.`,
+                );
             }}
-            onAdd={() =>
-              showNotice(
-                "Add to itinerary",
-                `${selected.name} is selected. Saving stops to your itinerary is coming soon. Nothing has been saved yet.`,
-              )
-            }
           />
         </View>
       ) : (
         <View style={s.empty}>
           <Text style={s.emptyText}>
-            No {vibe.toLowerCase()} stops in this view.
+            {mode === "My Trip"
+              ? tripsLoading || tripPlaces.loading
+                ? "Loading itinerary locations…"
+                : !activeTrip
+                  ? "Create a trip to see its planned places here."
+                  : tripPlaces.unresolved.length
+                    ? "Some itinerary places need a more specific map location."
+                    : "No mapped stops in this view. Add places in your trip itinerary."
+              : explore.loading
+                ? "Finding nearby attractions…"
+                : !activeTrip
+                  ? "Create a trip to explore its destination."
+                  : explore.places.length
+                    ? "No places match this filter."
+                    : "No additional attractions found nearby. Try another trip or retry the search."}
           </Text>
 
           <TouchableOpacity
             onPress={() => {
-              setMode("Explore");
-              setVibe("All Vibes");
-              setExpanded(true);
+              if (mode === "My Trip") {
+                if (activeTrip)
+                  router.push({
+                    pathname: "/trips/[id]/itinerary",
+                    params: { id: activeTrip.id },
+                  });
+                else router.push("/trips/create");
+              } else if (!activeTrip) router.push("/trips/create");
+              else if (!explore.places.length) explore.retry();
+              else setVibe("All");
             }}
           >
-            <Text style={s.link}>Explore all sample places</Text>
+            <Text style={s.link}>
+              {mode === "My Trip"
+                ? activeTrip
+                  ? "Open itinerary"
+                  : "Create trip"
+                : !activeTrip
+                  ? "Create trip"
+                  : !explore.places.length
+                    ? "Retry search"
+                    : "Clear filter"}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
 
+      <BottomSheet
+        visible={missingOpen}
+        title="Places without map pins"
+        onClose={() => setMissingOpen(false)}
+      >
+        <Text style={s.noticeText}>
+          These activities are still in your itinerary. Wikipedia cannot locate
+          every shop, restaurant, or general activity.
+        </Text>
+        {tripPlaces.unresolved.map((place) => (
+          <View key={place.id} style={{ paddingVertical: 12, gap: 4 }}>
+            <Text style={s.tripOptionTitle}>{place.name}</Text>
+            <Text style={s.tripOptionSubtitle}>{place.tags.join(" · ")}</Text>
+            <Text style={s.emptyText}>{place.reason}</Text>
+          </View>
+        ))}
+        <TouchableOpacity
+          onPress={() => {
+            setMissingOpen(false);
+            if (mode === "My Trip") tripPlaces.retry();
+            else explore.retry();
+          }}
+        >
+          <Text style={s.link}>Retry location lookup</Text>
+        </TouchableOpacity>
+        {activeTrip && (
+          <TouchableOpacity
+            onPress={() => {
+              setMissingOpen(false);
+              router.push({
+                pathname: "/trips/[id]/itinerary",
+                params: { id: activeTrip.id },
+              });
+            }}
+          >
+            <Text style={s.link}>Edit itinerary place names</Text>
+          </TouchableOpacity>
+        )}
+      </BottomSheet>
       <BottomSheet
         visible={notice !== null}
         title={notice?.title ?? ""}
@@ -452,6 +609,7 @@ export default function MapScreen() {
 }
 
 const s = StyleSheet.create({
+  status: { paddingHorizontal: 16, paddingBottom: 8, gap: 3 },
   screen: { flex: 1, backgroundColor: "#FAF7FF" },
   top: {
     flexDirection: "row",

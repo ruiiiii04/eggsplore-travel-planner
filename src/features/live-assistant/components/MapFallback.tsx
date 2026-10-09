@@ -17,7 +17,7 @@ export default function MapFallback({
         </Text>
         <Text style={styles.description}>{reason}</Text>
         <Text style={styles.description}>
-          Select a sample place below to try its details sheet.
+          Select a place below to try its details sheet.
         </Text>
       </View>
       <PlaceList {...props} />
