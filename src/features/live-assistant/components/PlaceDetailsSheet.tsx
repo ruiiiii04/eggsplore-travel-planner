@@ -153,8 +153,14 @@ export default function PlaceDetailsSheet({
               <View style={s.photoEmpty}>
                 <Camera size={24} color="#A988C6" />
                 <Text style={s.small}>
-                  {data?.photoNotice ?? "Photo unavailable"}
+                  {data?.photoNotice ?? (error ? "Place service unavailable" : "Photo unavailable")}
                 </Text>
+                {data?.photoNotice && (
+                  <TouchableOpacity accessibilityRole="button" onPress={retry} style={s.retry}>
+                    <RotateCcw size={16} color="#8050B2" />
+                    <Text style={s.link}>Retry photo</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
             <View style={s.titleRow}>

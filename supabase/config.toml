@@ -422,3 +422,16 @@ verify_jwt = true
 
 [functions.send-trip-invitations]
 verify_jwt = true
+
+# These handlers verify the JWT with Supabase Auth in authenticate().
+[functions.place-details]
+verify_jwt = false
+
+[functions.ask-assistant]
+verify_jwt = false
+
+[functions.trip-map]
+verify_jwt = false
+
+[functions.explore-places]
+verify_jwt = false

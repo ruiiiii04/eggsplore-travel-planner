@@ -98,6 +98,7 @@ export type ArticlePlace = {
   language: "en" | "ja";
   area: string;
   photoEntityId?: string;
+  photoEntityRequired?: boolean;
 };
 export async function fetchPlaceDetails(
   placeId: string,
@@ -154,32 +155,41 @@ export async function fetchPlaceDetails(
     try {
       let imageName = page.pageimage;
       if (place.photoEntityId) {
-        const entityResponse = await timedFetch(
-          fetcher,
-          `https://www.wikidata.org/wiki/Special:EntityData/${place.photoEntityId}.json`,
-          {
-            headers: {
-              "User-Agent": "EggsploreDemo/1.0",
-              Accept: "application/json",
+        try {
+          const entityResponse = await timedFetch(
+            fetcher,
+            "https://www.wikidata.org/wiki/Special:EntityData/" + place.photoEntityId + ".json",
+            {
+              headers: {
+                "User-Agent": "EggsploreDemo/1.0",
+                Accept: "application/json",
+              },
             },
-          },
-          25_000,
-        );
-        if (!entityResponse.ok) throw new Error("Photo record unavailable");
-        const entity = await entityResponse.json();
-        const claims =
-          entity.entities?.[place.photoEntityId]?.claims?.P18 ?? [];
-        imageName = claims.find(
-          (claim: {
-            rank?: string;
-            mainsnak?: { datavalue?: { value?: unknown } };
-          }) =>
-            claim.rank !== "deprecated" &&
-            typeof claim.mainsnak?.datavalue?.value === "string",
-        )?.mainsnak?.datavalue?.value;
-        if (typeof imageName !== "string" || !imageName)
-          throw new Error("No matched photo");
+            10_000,
+          );
+          if (!entityResponse.ok) throw new Error("Photo record unavailable");
+          const entity = await entityResponse.json();
+          const claims = entity.entities?.[place.photoEntityId]?.claims?.P18 ?? [];
+          const entityImage = claims.find(
+            (claim: {
+              rank?: string;
+              mainsnak?: { datavalue?: { value?: unknown } };
+            }) =>
+              claim.rank !== "deprecated" &&
+              typeof claim.mainsnak?.datavalue?.value === "string",
+          )?.mainsnak?.datavalue?.value;
+          if (typeof entityImage === "string" && entityImage)
+            imageName = entityImage;
+          else if (place.photoEntityRequired)
+            throw new Error("No matched photo");
+        } catch (error) {
+          // The exact article lead is still valid when optional Wikidata is down.
+          // Reviewed exceptions must never fall back to a known unrelated image.
+          if (place.photoEntityRequired) throw error;
+        }
       }
+      if (typeof imageName !== "string" || !imageName)
+        throw new Error("No matched photo");
       const image = await wiki(
         fetcher,
         {

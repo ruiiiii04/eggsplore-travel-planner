@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import Svg, { Path } from "react-native-svg";
 import { MapPin, RotateCcw, Utensils } from "lucide-react-native";
 
@@ -64,18 +64,19 @@ export default function NativeTripMap({
     [pointKey],
   );
   const [ready, setReady] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (ready) return;
+    if (loaded) return;
 
     const timeout = setTimeout(() => {
       setTimedOut(true);
     }, 20000);
 
     return () => clearTimeout(timeout);
-  }, [ready, attempt]);
+  }, [loaded, attempt]);
 
   useEffect(() => {
     if (!ready || !laidOut) return;
@@ -111,6 +112,8 @@ export default function NativeTripMap({
 
   const retry = () => {
     setReady(false);
+    setLoaded(false);
+    setLaidOut(false);
     setTimedOut(false);
     setAttempt((value) => value + 1);
   };
@@ -121,15 +124,16 @@ export default function NativeTripMap({
       <MapView
         key={attempt}
         ref={map}
-        style={styles.map}
+        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+        style={StyleSheet.absoluteFill}
         initialRegion={
           mapPoints[0]
             ? { ...mapPoints[0], latitudeDelta: 0.05, longitudeDelta: 0.05 }
             : {
-                latitude: 15,
-                longitude: 105,
-                latitudeDelta: 100,
-                longitudeDelta: 100,
+                latitude: center?.latitude ?? 15,
+                longitude: center?.longitude ?? 105,
+                latitudeDelta: center ? 0.12 : 100,
+                longitudeDelta: center ? 0.12 : 100,
               }
         }
         onLayout={() => setLaidOut(true)}
@@ -139,8 +143,10 @@ export default function NativeTripMap({
         customMapStyle={
           Platform.OS === "android" && mutedMap ? pastelMapStyle : undefined
         }
-        onMapReady={() => {
+        onMapReady={() => setReady(true)}
+        onMapLoaded={() => {
           setReady(true);
+          setLoaded(true);
           setTimedOut(false);
         }}
         showsUserLocation={false}
@@ -213,18 +219,18 @@ export default function NativeTripMap({
         })}
       </MapView>
 
-      {!ready && !timedOut && (
+      {!loaded && !timedOut && (
         <View pointerEvents="none" style={styles.loading}>
           <ActivityIndicator color={colors.brand} />
           <Text style={styles.text}>Starting map…</Text>
         </View>
       )}
 
-      {timedOut && !ready && (
+      {timedOut && !loaded && (
         <View style={styles.notice}>
           <Text accessibilityRole="alert" style={styles.text}>
-            The map is taking longer than expected. Check your connection and
-            try again.
+            Map tiles have not loaded. Check your connection and Google Play
+            services, then retry the map.
           </Text>
 
           <TouchableOpacity
@@ -246,9 +252,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F2EAFB",
-  },
-  map: {
-    flex: 1,
   },
 
   // CHANGED: fixed SVG dimensions replace the circle/triangle styles.

@@ -371,3 +371,34 @@ test("chat context can fetch the article without downloading photo metadata", as
   assert.equal(result.description, "Castle description");
   assert.equal(result.photos.length, 0);
 });
+
+for (const mode of ["missing-image", "outage"] as const) {
+  test("article photo survives optional Wikidata " + mode, async () => {
+    const n = wikiNetwork();
+    const fetcher: typeof fetch = async (input, init) => {
+      if (String(input).includes("www.wikidata.org")) {
+        if (mode === "outage") throw new Error("offline");
+        return Response.json({ entities: { Q123: { claims: {} } } });
+      }
+      return n.fetcher(input, init);
+    };
+    const result = await fetchPlaceDetails("wiki:en:123", fetcher, true, {
+      name: "Osaka Castle", article: "Osaka Castle", language: "en",
+      area: "Osaka", photoEntityId: "Q123",
+    });
+    assert.equal(result.photos.length, 1);
+    assert.equal(result.photos[0].id, "Castle.jpg");
+  });
+}
+
+test("reviewed park never falls back to its known unrelated article photo", async () => {
+  const n = wikiNetwork();
+  const fetcher: typeof fetch = async (input, init) =>
+    String(input).includes("www.wikidata.org")
+      ? Response.json({ entities: { Q6960289: { claims: {} } } })
+      : n.fetcher(input, init);
+  const result = await fetchPlaceDetails("sample-nakanoshima-park", fetcher);
+  assert.deepEqual(result.photos, []);
+  assert.ok(result.photoNotice);
+  assert.equal(n.urls.length, 1);
+});

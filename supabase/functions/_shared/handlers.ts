@@ -60,7 +60,7 @@ export function createAssistantHandler({
           ? await exploreArticle(placeId, fetcher)
           : await authorizedPlace(auth, placeId, fetcher);
       const apiKey = env("GEMINI_API_KEY");
-      const model = env("GEMINI_MODEL") ?? "gemini-2.5-flash-lite";
+      const model = env("GEMINI_MODEL") ?? "gemini-3.5-flash-lite";
       if (!apiKey)
         throw new ApiError(
           503,

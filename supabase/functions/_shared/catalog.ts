@@ -17,6 +17,7 @@ export const catalog = {
     name: "Nakanoshima Park",
     article: "Nakanoshima Park",
     photoEntityId: "Q6960289",
+    photoEntityRequired: true,
     language: "en",
     area: "Kita, Osaka",
   },
