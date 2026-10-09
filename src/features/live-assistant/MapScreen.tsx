@@ -40,6 +40,7 @@ export default function MapScreen() {
   return <TripMapScreen key={user?.id ?? "signed-out"} />;
 }
 function TripMapScreen() {
+  const { user } = useAuth();
   const { height, fontScale } = useWindowDimensions();
 
   const [mode, setMode] = useState<"My Trip" | "Explore">("My Trip");
@@ -460,22 +461,6 @@ function TripMapScreen() {
             <Layers size={25} color="#7745AD" />
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={s.legend}
-          accessibilityRole="button"
-          onPress={() =>
-            showNotice(
-              "Map legend",
-              "My Trip shows planned stops. Explore suggests nearby attractions outside your itinerary. Purple pins mark places; tap a pin for details.",
-            )
-          }
-        >
-          <Text style={s.demo}>
-            {mode === "Explore" ? "EXPLORE" : "PLANNED STOPS"}
-          </Text>
-          <Text style={s.legendText}>Tap a pin for details</Text>
-        </TouchableOpacity>
       </View>
 
       {selected ? (
@@ -496,16 +481,21 @@ function TripMapScreen() {
             onToggle={() => setExpanded((value) => !value)}
             dragHandlers={sheetPanResponder.panHandlers}
             onAdd={() => {
-              if (selected.tripId)
-                router.push({
-                  pathname: "/trips/[id]/itinerary",
-                  params: { id: selected.tripId },
-                });
-              else
-                showNotice(
-                  "Add to itinerary",
-                  `${selected.name} is selected. Adding Explore places to an itinerary is not connected yet.`,
-                );
+              if (mode === "My Trip" && selected.tripId) {
+                router.push({ pathname: "/trips/[id]/itinerary", params: { id: selected.tripId } });
+                return;
+              }
+              if (!activeTrip) return;
+              if (activeTrip.owner_id !== user?.id) {
+                showNotice("Add to itinerary", "Only the trip organiser can add activities.");
+                return;
+              }
+              router.push({ pathname: "/trips/[id]/itinerary", params: {
+                id: activeTrip.id, action: "add-activity", activityName: selected.name,
+                locationDraft: JSON.stringify({ provider: "wikipedia", providerId: selected.id,
+                  name: selected.name, address: selected.area, latitude: selected.latitude,
+                  longitude: selected.longitude, categories: [] }),
+              } });
             }}
           />
         </View>
@@ -564,14 +554,20 @@ function TripMapScreen() {
         onClose={() => setMissingOpen(false)}
       >
         <Text style={s.noticeText}>
-          These activities are still in your itinerary. Wikipedia cannot locate
-          every shop, restaurant, or general activity.
+          These activities are still in your itinerary. Choose Find location to
+          select their exact location or drop a pin.
         </Text>
         {tripPlaces.unresolved.map((place) => (
           <View key={place.id} style={{ paddingVertical: 12, gap: 4 }}>
             <Text style={s.tripOptionTitle}>{place.name}</Text>
             <Text style={s.tripOptionSubtitle}>{place.tags.join(" · ")}</Text>
             <Text style={s.emptyText}>{place.reason}</Text>
+            <TouchableOpacity accessibilityRole="button" onPress={() => {
+              setMissingOpen(false);
+              router.push({ pathname: "/trips/[id]/itinerary", params: {
+                id: place.tripId, action: "find-location", activityId: place.id,
+              } });
+            }}><Text style={s.link}>Find location</Text></TouchableOpacity>
           </View>
         ))}
         <TouchableOpacity
@@ -783,27 +779,6 @@ const s = StyleSheet.create({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
   },
-  legend: {
-    position: "absolute",
-    bottom: 16,
-    left: 12,
-    right: 70,
-    backgroundColor: "white",
-    borderRadius: 24,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 4,
-    flexWrap: "wrap",
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  legendText: { fontSize: 10, color: "#74617F" },
   empty: { padding: 22, gap: 10 },
   emptyText: { color: "#4E2867" },
   link: {

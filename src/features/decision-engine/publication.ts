@@ -4,6 +4,12 @@ export type PublishedActivity = {
   description: string | null;
   activity_category: string | null;
   location_name: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_provider?: string | null;
+  location_provider_id?: string | null;
+  location_address?: string | null;
+  location_categories?: string[];
   start_time: string | null;
   position: number;
 };

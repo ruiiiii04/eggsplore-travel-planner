@@ -182,7 +182,8 @@ test("successful chat sends history and reference, never returns server key", as
   assert.equal(body.contents[1].role, "model");
   assert.match(body.systemInstruction.parts[0].text, /no live browsing/i);
   assert.equal(body.tools, undefined);
-  assert.equal(body.generationConfig.maxOutputTokens, 1024);
+  assert.equal(body.generationConfig.maxOutputTokens, 1600);
+  assert.equal(body.generationConfig.responseMimeType, "application/json");
 });
 test("Gemini quota exhaustion returns actionable error", async () => {
   const n = network({ gemini: 429 });

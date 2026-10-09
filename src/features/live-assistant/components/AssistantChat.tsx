@@ -1,3 +1,4 @@
+import { cleanChatText } from "../services/chatText";
 // NEW: selected-place chat. History stays in memory while this dialog is open.
 import { useEffect, useRef, useState } from "react";
 import {
@@ -21,6 +22,7 @@ import type { AssistantReply, ChatMessage, SamplePlace } from "../types";
 type DisplayMessage = ChatMessage & {
   sources?: AssistantReply["sources"];
   truncated?: boolean;
+  followUps?: string[];
 };
 export default function AssistantChat({
   place,
@@ -72,7 +74,8 @@ export default function AssistantChat({
         { role: "user", text: question },
         {
           role: "assistant",
-          text: reply.answer,
+          text: cleanChatText(reply.answer),
+          followUps: reply.followUps,
           sources: reply.sources,
           truncated: reply.truncated,
         },
@@ -168,6 +171,13 @@ export default function AssistantChat({
                   <Text selectable style={s.message}>
                     {message.text}
                   </Text>
+                  {message.role === "assistant" && message.followUps?.map((question) => (
+                    <TouchableOpacity key={question} accessibilityRole="button"
+                      accessibilityState={{ disabled: busy }} disabled={busy}
+                      style={[s.suggestion, busy && s.disabled]} onPress={() => void send(question)}>
+                      <Text style={s.suggestionText}>{question}</Text>
+                    </TouchableOpacity>
+                  ))}
                   {message.truncated && (
                     <Text style={s.note}>
                       Response shortened. Ask a follow-up for more detail.

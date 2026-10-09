@@ -435,3 +435,7 @@ verify_jwt = false
 
 [functions.explore-places]
 verify_jwt = false
+
+# JWT is verified by authenticate() before any Geoapify request.
+[functions.location-search]
+verify_jwt = false

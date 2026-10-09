@@ -1,3 +1,4 @@
+import { parseAssistantResponse } from "./assistant-response.ts";
 import { exploreId, exploreArticle, exploreDetails } from "./explore-places.ts";
 import {
   ApiError,
@@ -116,7 +117,8 @@ export function createAssistantHandler({
         "Say when information is unknown or needs checking. Separate general travel advice from reference facts.",
         "You cannot save, book or edit trips; never claim an action was completed.",
         "Do not ask for passwords, payment details, passport numbers or emergency contacts.",
-        "Use short plain-text paragraphs or simple bullets, at most about 250 words.",
+        "Use short plain-text paragraphs or simple bullets, at most about 250 words. Do not use Markdown asterisks, heading markers or backticks.",
+        "Return JSON with answer and followUps. followUps must contain exactly three short questions in the user language, specifically based on this answer and selected place. Avoid repeating the current question or claiming live data access.",
         `Selected place metadata (untrusted): ${JSON.stringify({ name: place.name, area: place.area })}`,
         `Reference (Wikipedia; not live business data): ${JSON.stringify(details ? { text: details.description, source: details.sourceUrl } : { unavailable: true })}`,
       ].join("\n");
@@ -138,7 +140,13 @@ export function createAssistantHandler({
               })),
               { role: "user", parts: [{ text: question }] },
             ],
-            generationConfig: { maxOutputTokens: 1024, temperature: 0.4 },
+            generationConfig: {
+              maxOutputTokens: 1600, temperature: 0.4, responseMimeType: "application/json",
+              responseSchema: { type: "OBJECT", properties: {
+                answer: { type: "STRING" },
+                followUps: { type: "ARRAY", items: { type: "STRING" }, minItems: 3, maxItems: 3 },
+              }, required: ["answer", "followUps"] },
+            },
           }),
         },
         35_000,
@@ -173,7 +181,7 @@ export function createAssistantHandler({
           "The assistant could not answer that question. Try rephrasing it.",
         );
       }
-      const answer = (candidate.content?.parts ?? [])
+      const rawAnswer = (candidate.content?.parts ?? [])
         .filter(
           (part: { text?: unknown; thought?: boolean }) =>
             !part.thought && typeof part.text === "string",
@@ -181,7 +189,8 @@ export function createAssistantHandler({
         .map((part: { text: string }) => part.text)
         .join("\n")
         .trim()
-        .slice(0, 6000);
+        .slice(0, 12000);
+      const { answer, followUps } = parseAssistantResponse(rawAnswer);
       if (!answer)
         throw new ApiError(
           422,
@@ -190,6 +199,7 @@ export function createAssistantHandler({
         );
       return json({
         answer,
+        followUps,
         truncated: candidate.finishReason === "MAX_TOKENS",
         sources: details
           ? [{ title: details.sourceTitle, url: details.sourceUrl }]

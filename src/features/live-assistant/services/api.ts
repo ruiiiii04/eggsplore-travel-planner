@@ -3,7 +3,7 @@ import { getSupabase } from "@/lib/supabase";
 import type { AssistantReply, ChatMessage, OnlinePlaceDetails } from "../types";
 
 export async function invokeAssistantFunction<T>(
-  name: "place-details" | "ask-assistant" | "trip-map" | "explore-places",
+  name: "place-details" | "ask-assistant" | "trip-map" | "explore-places" | "location-search",
   body: unknown,
   signal?: AbortSignal,
 ): Promise<T> {

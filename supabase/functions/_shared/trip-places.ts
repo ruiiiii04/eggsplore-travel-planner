@@ -1,3 +1,4 @@
+import { categoryVibes } from "./location-categories.ts";
 // NEW: read itinerary data with the caller's JWT. Never use a service-role key.
 import {
   ApiError,
@@ -14,6 +15,7 @@ export type Item = {
   title: string;
   description: string | null;
   location_name: string | null;
+  location_categories?: string[] | null;
   activity_category: string | null;
   vibe_tags?: string[] | null;
   vibe_source?: string | null;
@@ -72,7 +74,7 @@ export async function readTrip(auth: Auth, id: string, fetcher: Fetcher) {
   return rows[0];
 }
 export const itemFields =
-  "id,trip_id,title,description,location_name,activity_category,latitude,longitude,position,vibe_tags,vibe_source";
+  "id,trip_id,title,description,location_name,activity_category,latitude,longitude,position,vibe_tags,vibe_source,location_categories";
 export async function readItem(auth: Auth, id: string, fetcher: Fetcher) {
   const rows = await readRows<Item>(
     auth,
@@ -301,7 +303,9 @@ export async function itineraryDetails(
 
 // NEW: stored vibes are independent of the four itinerary activity categories.
 const allowedVibes = new Set(["Foodie", "Heritage", "Nature", "Shopping", "Arts", "Entertainment", "Nightlife", "Wellness", "Tranquility", "Attractions", "Transport", "Stay"]);
-export function vibeTags(item: Pick<Item, "vibe_tags" | "activity_category" | "description">): string[] {
+export function vibeTags(item: Pick<Item, "vibe_tags" | "activity_category" | "description" | "location_categories">): string[] {
+  const providerTags = categoryVibes(item.location_categories ?? []);
+  if (providerTags.length) return [...new Set([...providerTags, ...(item.vibe_tags ?? []).filter(tag => allowedVibes.has(tag))])];
   if (Array.isArray(item.vibe_tags)) {
     const tags = [...new Set(item.vibe_tags.filter(tag => allowedVibes.has(tag)))];
     return tags.length ? tags : ["Unclassified"];

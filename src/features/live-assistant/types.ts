@@ -24,6 +24,7 @@ export type TripMapProps = {
   resetSignal?: number;
   mutedMap?: boolean;
   center?: { latitude: number; longitude: number } | null;
+  onSelectCoordinate?: (point: { latitude: number; longitude: number }) => void;
 };
 // NEW: online details and chat contracts. These do not represent live business data.
 export type PlacePhoto = {
@@ -50,6 +51,7 @@ export type OnlinePlaceDetails = {
 export type ChatMessage = { role: "user" | "assistant"; text: string };
 export type AssistantReply = {
   answer: string;
+  followUps?: string[];
   truncated: boolean;
   referenceAvailable: boolean;
   sources: { title: string; url: string }[];
