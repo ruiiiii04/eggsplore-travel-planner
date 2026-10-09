@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import ExpoGoTripMap from "./ExpoGoTripMap";
+import NativeTripMap from "./NativeTripMap";
 import type { TripMapProps } from "../types";
 
 // Share the same Leaflet map, tiles, and interaction on Android and iOS,
@@ -10,5 +10,5 @@ export default function TripMap(props: TripMapProps) {
   useFocusEffect(useCallback(() => {
     setGeneration((value) => value + 1);
   }, []));
-  return <ExpoGoTripMap key={generation} {...props} />;
+  return <NativeTripMap key={generation} {...props} />;
 }

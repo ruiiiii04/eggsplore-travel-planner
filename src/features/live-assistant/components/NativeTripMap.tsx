@@ -143,7 +143,15 @@ export default function NativeTripMap({
         customMapStyle={
           Platform.OS === "android" && mutedMap ? pastelMapStyle : undefined
         }
-        onMapReady={() => setReady(true)}
+        onMapReady={() => {
+          setReady(true);
+          // Apple Maps does not reliably emit the Google tile-loaded event.
+          // Readiness ends its startup indicator; it is not proof of tile delivery.
+          if (Platform.OS === "ios") {
+            setLoaded(true);
+            setTimedOut(false);
+          }
+        }}
         onMapLoaded={() => {
           setReady(true);
           setLoaded(true);
