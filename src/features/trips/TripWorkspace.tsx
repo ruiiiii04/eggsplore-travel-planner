@@ -1,3 +1,5 @@
+import LocationField from "./location/LocationField";
+import { parseLocation, parseLocationParam, savedLocationColumns, type ActivityLocation } from "./location/model";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -17,12 +19,14 @@ import { AddExpenseButton, BudgetContent } from "../budget/BudgetContent";
 import { NotificationBell } from "../notifications/NotificationBell";
 
 type ScreenMode = "trip" | "itinerary" | "notes" | "candidates" | "budget";
-type ItineraryItem = { id: string; title: string; description: string | null; activity_category: string | null; location_name: string | null; start_time: string | null; position: number };
+type ItineraryItem = { id: string; title: string; description: string | null; activity_category: string | null; location_name: string | null; start_time: string | null; position: number; latitude?: number | null; longitude?: number | null; location_provider?: string | null; location_provider_id?: string | null; location_address?: string | null; location_categories?: string[] | null };
+
 type NoteItem = { id: string; title: string; detail: string; done?: boolean; icon?: string; reminderDay?: number | null; reminderDate?: string | null; reminderTime?: string | null };
 type AddKind = "activity" | "note" | null;
 type DeleteRequest = { kind: "activity"; item: ItineraryItem } | { kind: "note"; item: NoteItem } | { kind: "day"; date: string; dayNumber: number; activityCount: number };
 type TripMember = { user_id: string; username: string; display_name: string | null; avatar_url: string | null; role: "owner" | "member" };
 type TripAction = { kind: "delete-trip" } | { kind: "leave-trip" } | { kind: "remove-member"; member: TripMember };
+const itineraryFields = "id,title,description,activity_category,location_name,start_time,position,latitude,longitude,location_provider,location_provider_id,location_address,location_categories";
 const activityCategories = [["sightseeing", "Attraction", Camera], ["food", "Food", Utensils], ["transport", "Transport", TrainFront], ["stay", "Stay", BedDouble]] as const;
 const noteCategories = [["reminder", "Reminder", Check], ["packing", "Packing", Luggage], ["idea", "Idea", Lightbulb], ["general", "General", Pencil]] as const;
 const ink = "#37134F", purple = "#8050C5", muted = "#89789D", line = "#EEE7F5", pale = "#F5F0FB";
@@ -30,7 +34,7 @@ const formLabel = { color: ink, fontSize: 12, fontWeight: "700" as const, margin
 const formInput = { minHeight: 46, borderRadius: 13, borderWidth: 1, borderColor: line, backgroundColor: "white", paddingHorizontal: 13, color: ink, fontSize: 14 };
 
 export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
-  const { id = "", from = "", action = "" } = useLocalSearchParams<{ id: string; from?: string; action?: string }>();
+  const { id = "", from = "", action = "", activityId = "", locationDraft = "", activityName = "" } = useLocalSearchParams<{ id: string; from?: string; action?: string; activityId?: string; locationDraft?: string; activityName?: string }>();
   const { user } = useAuth();
   const [activeMode, setActiveMode] = useState<ScreenMode>(mode);
   const scrollRef = useRef<ScrollView>(null);
@@ -44,6 +48,8 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
   const [addKind, setAddKind] = useState<AddKind>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDetail, setDraftDetail] = useState("");
+  const [draftLocation, setDraftLocation] = useState<ActivityLocation | null>(null);
+  const [itineraryLoaded, setItineraryLoaded] = useState(false);
   const [draftDate, setDraftDate] = useState("");
   const [draftDayNumber, setDraftDayNumber] = useState<number | null>(null);
   const [draftTime, setDraftTime] = useState("");
@@ -81,14 +87,15 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
   useEffect(() => {
     let active = true;
     const version = itineraryVersion.current;
+    setItineraryLoaded(false);
     void (async () => {
       try {
         const { data, error: failure } = await getSupabase().from("trips").select("*").eq("id", id).single();
         if (failure) throw failure;
         if (active && version === itineraryVersion.current) setTrip(data as Trip);
-        const { data: rows, error: itemFailure } = await getSupabase().from("itinerary_items").select("id,title,description,activity_category,location_name,start_time,position").eq("trip_id", id).order("position", { ascending: true });
+        const { data: rows, error: itemFailure } = await getSupabase().from("itinerary_items").select(itineraryFields).eq("trip_id", id).order("position", { ascending: true });
         if (itemFailure) throw itemFailure;
-        if (active && version === itineraryVersion.current) setItems((rows ?? []) as ItineraryItem[]);
+        if (active && version === itineraryVersion.current) { setItems((rows ?? []) as ItineraryItem[]); setItineraryLoaded(true); }
       } catch (cause) { if (active) setError(errorMessage(cause)); }
     })();
     return () => { active = false; };
@@ -207,6 +214,7 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
     persistNotes(value, notes, revision, cachePendingNotes(value, notes, revision));
   };
   const openAdd = (kind: Exclude<AddKind, null>, day?: string, dayNumber?: number) => {
+    setDraftLocation(null);
     const initialDate = day ?? trip?.start_date ?? "";
     const initialDayIndex = tripDays.indexOf(initialDate);
     setEditingActivity(null); setEditingNote(null); setDraftTitle(""); setDraftDetail(""); setDraftDate(initialDate); setDraftDayNumber(dayNumber ?? (initialDayIndex >= 0 ? initialDayIndex + 1 : null)); setDraftTime("");
@@ -224,6 +232,10 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
     setFormError(""); setAddKind("note");
   };
   const openEditActivity = (item: ItineraryItem) => {
+    setDraftLocation(parseLocation({ provider: item.location_provider || "manual",
+      providerId: item.location_provider_id || "", name: item.location_name || item.title,
+      address: item.location_address || item.location_name || item.title,
+      latitude: item.latitude, longitude: item.longitude, categories: item.location_categories ?? [] }));
     setEditingNote(null); setEditingActivity(item); setDraftTitle(item.title); setDraftDetail(item.location_name ?? "");
     const legacyDay = parseLegacyDayDescription(item.description);
     const itemDate = item.start_time?.slice(0, 10) ?? "";
@@ -256,14 +268,14 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
         const movingToDifferentDay = !!editingActivity && getItineraryDayKey(editingActivity) !== destinationDayKey;
         const targetDayItems = items.filter((entry) => entry.id !== editingActivity?.id && getItineraryDayKey(entry) === destinationDayKey);
         const nextPosition = movingToDifferentDay ? Math.max(-1, ...targetDayItems.map((entry) => entry.position)) + 1 : undefined;
-        const values = { title: draftTitle.trim(), location_name: draftDetail.trim() || null, description, activity_category: draftCategory, start_time: startTime, ...(nextPosition === undefined ? {} : { position: nextPosition }) };
+        const values = { ...savedLocationColumns(draftLocation), title: draftTitle.trim(), location_name: draftDetail.trim() || null, description, activity_category: draftCategory, start_time: startTime, ...(nextPosition === undefined ? {} : { position: nextPosition }) };
         if (editingActivity) {
-          const { data, error: failure } = await getSupabase().from("itinerary_items").update(values).eq("id", editingActivity.id).eq("trip_id", id).select("id,title,description,activity_category,location_name,start_time,position").single();
+          const { data, error: failure } = await getSupabase().from("itinerary_items").update(values).eq("id", editingActivity.id).eq("trip_id", id).select(itineraryFields).single();
           if (failure) throw failure;
           setItems((previous) => previous.map((item) => item.id === editingActivity.id ? data as ItineraryItem : item).sort((a, b) => a.position - b.position));
         } else {
           const position = Math.max(-1, ...items.filter((entry) => getItineraryDayKey(entry) === destinationDayKey).map((entry) => entry.position)) + 1;
-          const { data, error: failure } = await getSupabase().from("itinerary_items").insert({ trip_id: id, ...values, position }).select("id,title,description,activity_category,location_name,start_time,position").single();
+          const { data, error: failure } = await getSupabase().from("itinerary_items").insert({ trip_id: id, ...values, position }).select(itineraryFields).single();
           if (failure) throw failure;
           setItems((previous) => [...previous, data as ItineraryItem].sort((a, b) => a.position - b.position));
         }
@@ -388,6 +400,27 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
     setManageOpen(true); setMemberMatch(null); setMemberQuery(""); setManagementError("");
     void loadTripMembers();
   };
+  const handledMapAction = useRef("");
+  useEffect(() => {
+    if (!["add-activity", "find-location"].includes(action)) { handledMapAction.current = ""; return; }
+    if (!trip || !user || !itineraryLoaded) return;
+    const token = JSON.stringify([id, action, activityId, locationDraft, activityName]);
+    if (handledMapAction.current === token) return;
+    handledMapAction.current = token;
+    router.setParams({ action: "", activityId: "", locationDraft: "", activityName: "" });
+    if (trip.owner_id !== user.id) { setError("Only the trip organiser can edit this itinerary."); return; }
+    setActiveMode("itinerary");
+    if (action === "find-location") {
+      const item = items.find((value) => value.id === activityId);
+      if (item) { openEditActivity(item); if (!item.location_name) setDraftDetail(item.title); }
+      else setError("This activity is no longer in the itinerary.");
+    } else {
+      openAdd("activity");
+      const location = parseLocationParam(locationDraft);
+      setDraftTitle(activityName.slice(0, 120));
+      if (location) { setDraftLocation(location); setDraftDetail(location.name); }
+    }
+  }, [action, id, activityId, locationDraft, activityName, trip?.id, user?.id, itineraryLoaded]);
   const inviteOpened = useRef("");
   useEffect(() => {
     if (action !== "invite" || !trip || !user || inviteOpened.current === id) return;
@@ -512,8 +545,11 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
       <Text style={formLabel}>{addKind === "activity" ? "Activity name *" : "Title *"}</Text>
       <TextInput value={draftTitle} onChangeText={setDraftTitle} placeholder={addKind === "activity" ? "e.g. Visit Senso-ji Temple" : "e.g. Remember to bring an umbrella"} placeholderTextColor="#A99CB5" style={formInput} autoFocus />
       <Text style={formLabel}>{addKind === "activity" ? "Location (optional)" : "Details (optional)"}</Text>
-      <TextInput value={draftDetail} onChangeText={setDraftDetail} placeholder={addKind === "activity" ? "Place or area" : "Add a little more detail"} placeholderTextColor="#A99CB5" style={formInput} />
-      {addKind === "activity" && <View style={{ gap: 8 }}><Text style={formLabel}>Day</Text>{editingActivity ? <ActivityDaySelector items={items} tripDays={tripDays} date={draftDate} dayNumber={draftDayNumber} onChange={(date, dayNumber) => { setDraftDate(date); setDraftDayNumber(dayNumber); }} /> : <Text style={{ color: muted, fontSize: 12 }}>{draftDate ? formatTravelDate(draftDate) : draftDayNumber ? `Day ${draftDayNumber} · No calendar date` : "Flexible"}</Text>}<Text style={formLabel}>Time (optional)</Text><TextInput value={draftTime} onChangeText={setDraftTime} placeholder="09:30" placeholderTextColor={muted} style={formInput} /></View>}
+      {addKind === "activity" ? <LocationField key={editingActivity?.id ?? "new"} tripId={id} text={draftDetail} selection={draftLocation}
+        onTextChange={(value) => { setDraftDetail(value); setDraftLocation(null); }}
+        onSelect={(location) => { setDraftLocation(location); setDraftDetail(location.name); }} /> :
+        <TextInput value={draftDetail} onChangeText={setDraftDetail} placeholder="Add a little more detail" placeholderTextColor="#A99CB5" style={formInput} />}
+      {addKind === "activity" && <View style={{ gap: 8 }}><Text style={formLabel}>Day</Text><ActivityDaySelector items={items} tripDays={tripDays} flexibleDayCount={trip?.flexible_day_count ?? 1} date={draftDate} dayNumber={draftDayNumber} onChange={(date, dayNumber) => { setDraftDate(date); setDraftDayNumber(dayNumber); }} /><Text style={formLabel}>Time (optional)</Text><TextInput value={draftTime} onChangeText={setDraftTime} placeholder="09:30" placeholderTextColor={muted} style={formInput} /></View>}
       {addKind === "note" && <View style={{ gap: 10, padding: 13, borderRadius: 16, backgroundColor: pale, borderWidth: 1, borderColor: line }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><View style={{ width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "white" }}><Bell size={15} color={purple} /></View><View style={{ flex: 1 }}><Text style={{ color: ink, fontSize: 12, fontWeight: "700" }}>Reminder</Text><Text style={{ color: muted, fontSize: 9, marginTop: 2 }}>{draftReminderDate ? "Choose when this note should alert you" : "Get an alert for this note"}</Text></View><Switch accessibilityLabel="Enable note reminder" value={!!draftReminderDate} onValueChange={(enabled) => setDraftReminderDate(enabled ? suggestedReminderDate(trip?.start_date, tripDays) : null)} trackColor={{ false: "#DED6E7", true: "#CBB1E9" }} thumbColor={draftReminderDate ? purple : "#FFFFFF"} />
         </View>
@@ -594,8 +630,8 @@ function WorkspaceContentTabs({ active, go }: { active: "itinerary" | "notes"; g
     {([["itinerary", "Full Itinerary"], ["notes", "My Notes"]] as const).map(([mode, label]) => <Pressable key={mode} onPress={() => go(mode)} style={{ flex: 1, borderRadius: 22, backgroundColor: active === mode ? purple : "transparent", alignItems: "center", justifyContent: "center" }}><Text style={{ color: active === mode ? "white" : muted, fontWeight: active === mode ? "700" : "600", fontSize: 12 }}>{label}</Text></Pressable>)}
   </View>;
 }
-function ActivityDaySelector({ items, tripDays, date, dayNumber, onChange }: { items: ItineraryItem[]; tripDays: string[]; date: string; dayNumber: number | null; onChange: (date: string, dayNumber: number | null) => void }) {
-  const undatedDayNumbers = [...new Set(items.filter((item) => !item.start_time).map((item) => parseLegacyDayDescription(item.description)?.day).filter((value): value is number => value !== undefined))].sort((a, b) => a - b);
+function ActivityDaySelector({ items, tripDays, flexibleDayCount, date, dayNumber, onChange }: { items: ItineraryItem[]; tripDays: string[]; flexibleDayCount: number; date: string; dayNumber: number | null; onChange: (date: string, dayNumber: number | null) => void }) {
+  const undatedDayNumbers = [...new Set([...(tripDays.length ? [] : Array.from({ length: Math.min(120, flexibleDayCount) }, (_, index) => index + 1)), ...items.filter((item) => !item.start_time).map((item) => parseLegacyDayDescription(item.description)?.day).filter((value): value is number => value !== undefined)])].sort((a, b) => a - b);
   const options = [
     { date: "", dayNumber: null as number | null, label: "Flexible" },
     ...undatedDayNumbers.map((number) => ({ date: "", dayNumber: number, label: `Day ${number} · No date` })),

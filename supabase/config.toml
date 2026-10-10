@@ -423,5 +423,22 @@ verify_jwt = true
 [functions.send-trip-invitations]
 verify_jwt = true
 
+# These handlers verify the JWT with Supabase Auth in authenticate().
+[functions.place-details]
+verify_jwt = false
+
+[functions.ask-assistant]
+verify_jwt = false
+
+[functions.trip-map]
+verify_jwt = false
+
+[functions.explore-places]
+verify_jwt = false
+
+# JWT is verified by authenticate() before any Geoapify request.
+[functions.location-search]
+verify_jwt = false
+
 [functions.estimate-costs]
 verify_jwt = true
