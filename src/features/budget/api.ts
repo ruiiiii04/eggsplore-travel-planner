@@ -138,3 +138,13 @@ export async function setSplitSettled(
     .eq("id", splitId);
   if (error) throw error;
 }
+
+// One update for all the rows, so the payer gets a single notification.
+export async function setSplitsSettled(splitIds: string[]): Promise<void> {
+  if (splitIds.length === 0) return;
+  const { error } = await getSupabase()
+    .from("expense_splits")
+    .update({ settled: true })
+    .in("id", splitIds);
+  if (error) throw error;
+}

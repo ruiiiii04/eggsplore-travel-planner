@@ -10,8 +10,9 @@ import { SettlementRow } from "./components/SettlementRow";
 import { ExpenseListItem } from "./components/ExpenseListItem";
 import { SelectField, type SelectOption } from "./components/SelectField";
 import { TripForecastCard } from "./components/TripForecastCard";
-import { saveBudget, setSplitSettled } from "./api";
-import { debtsOwedBy, mySpent } from "./ledger";
+import { saveBudget, setSplitsSettled } from "./api";
+// import { debtBreakdown, mySpent } from "./ledger";
+import { debtBreakdown, mySpent, relatedExpenses } from "./ledger";
 import { useBudget } from "./useBudget";
 import type { ExpenseCategory } from "./model";
 
@@ -55,17 +56,23 @@ export function BudgetContent({ tripId }: { tripId: string }) {
   const [budgetError, setBudgetError] = useState<string | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [owesOpen, setOwesOpen] = useState(false);
+  const [settlingId, setSettlingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [defaultSplit, setDefaultSplit] = useState<SelectOption>(
     SPLIT_OPTIONS[0],
   );
 
   const budget = data?.budget?.budget_amount ?? null;
+  const isSolo = !!data && data.members.length <= 1;
   const spent = data && user ? mySpent(data.splits, user.id) : 0;
-  const debts =
-    data && user ? debtsOwedBy(user.id, data.expenses, data.splits) : {};
-  const [topDebtorId, topDebtAmount] =
-    Object.entries(debts).sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+  const debtList =
+    data && user ? debtBreakdown(user.id, data.expenses, data.splits) : [];
+      const related =
+    data && user ? relatedExpenses(user.id, data.expenses, data.splits) : [];
+  const totalOwed =
+    Math.round(debtList.reduce((sum, d) => sum + Math.round(d.total * 100), 0)) /
+    100;
 
   function nameOf(userId: string | null): string {
     if (!userId) return "Someone";
@@ -113,23 +120,19 @@ export function BudgetContent({ tripId }: { tripId: string }) {
     }
   }
 
-  async function settleUp() {
-    if (!data || !user || !topDebtorId) return;
-    const payerOf = new Map(data.expenses.map((e) => [e.id, e.paid_by]));
-    const ids = data.splits
-      .filter(
-        (s) =>
-          s.user_id === user.id &&
-          !s.settled &&
-          payerOf.get(s.expense_id) === topDebtorId,
-      )
-      .map((s) => s.id);
+  async function settleWith(payerId: string) {
+    const debt = debtList.find((d) => d.payerId === payerId);
+    if (!debt) return;
     setActionError("");
+    setSettlingId(payerId);
     try {
-      await Promise.all(ids.map((splitId) => setSplitSettled(splitId, true)));
+      await setSplitsSettled(debt.lines.map((line) => line.splitId));
       refresh();
+      if (debtList.length <= 1) setOwesOpen(false);
     } catch (cause) {
       setActionError(errorMessage(cause));
+    } finally {
+      setSettlingId(null);
     }
   }
 
@@ -172,17 +175,27 @@ export function BudgetContent({ tripId }: { tripId: string }) {
                 <BudgetSummaryCard budget={budget} spent={spent} currency="RM" />
               </>
             )}
-            <SettlementRow
-              owesName={topDebtorId ? nameOf(topDebtorId) : null}
-              amount={topDebtAmount}
-              currency="RM"
-            />
-            {topDebtorId && (
-              <Button variant="secondary" onPress={settleUp}>
-                Mark as paid to {nameOf(topDebtorId)}
-              </Button>
+            {!isSolo && (
+              <SettlementRow
+                owesName={
+                  debtList.length > 1
+                    ? `${debtList.length} people`
+                    : debtList[0]
+                      ? nameOf(debtList[0].payerId)
+                      : null
+                }
+                amount={totalOwed}
+                currency="RM"
+                onPress={
+                  debtList.length > 0
+                    ? () => {
+                        setActionError("");
+                        setOwesOpen(true);
+                      }
+                    : undefined
+                }
+              />
             )}
-            <Message error>{actionError}</Message>
           </View>
 
           <TripForecastCard
@@ -197,12 +210,14 @@ export function BudgetContent({ tripId }: { tripId: string }) {
               <Text className="text-base font-semibold text-ink">
                 Quick Add by Category
               </Text>
-              <SelectField
-                label="Default Split Type"
-                value={defaultSplit}
-                options={SPLIT_OPTIONS}
-                onChange={setDefaultSplit}
-              />
+              {!isSolo && (
+                <SelectField
+                  label="Default Split Type"
+                  value={defaultSplit}
+                  options={SPLIT_OPTIONS}
+                  onChange={setDefaultSplit}
+                />
+              )}
             </View>
             <View className="flex-row justify-between">
               {CATEGORY_OPTIONS.map((c) => (
@@ -222,14 +237,17 @@ export function BudgetContent({ tripId }: { tripId: string }) {
 
           <View className="gap-2">
             <Text className="text-lg font-bold text-ink">Recent Expenses</Text>
-            {data.expenses.length === 0 && (
-              <Message>No expenses yet. Tap Add Expense to log one.</Message>
+            {related.length === 0 && (
+              <Message>
+                No expenses involving you yet. Tap Add Expense to log one.
+              </Message>
             )}
-            {data.expenses.map((expense) => (
+            {related.map(({ expense, myShare }) => (
               <ExpenseListItem
                 key={expense.id}
                 expense={expense}
                 paidByName={nameOf(expense.paid_by)}
+                myShare={myShare}
               />
             ))}
           </View>
@@ -258,6 +276,54 @@ export function BudgetContent({ tripId }: { tripId: string }) {
         <Button busy={saving} onPress={submitBudget}>
           Save Budget
         </Button>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={owesOpen}
+        title="What you owe"
+        onClose={() => {
+          if (!settlingId) setOwesOpen(false);
+        }}
+        busy={!!settlingId}
+      >
+        {debtList.length === 0 && <Message>You're all settled up.</Message>}
+        {debtList.map((debt) => (
+          <View
+            key={debt.payerId}
+            className="gap-2 rounded-lg border border-line bg-white p-3"
+          >
+            <View className="flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-ink">
+                {nameOf(debt.payerId)}
+              </Text>
+              <Text className="text-base font-semibold text-brand">
+                RM {debt.total.toFixed(2)}
+              </Text>
+            </View>
+            {debt.lines.map((line) => (
+              <View key={line.splitId} className="flex-row justify-between gap-3">
+                <Text numberOfLines={1} className="flex-1 text-xs text-muted">
+                  {line.title}
+                </Text>
+                <Text className="text-xs text-muted">
+                  RM {line.amount.toFixed(2)}
+                </Text>
+              </View>
+            ))}
+            <Button
+              variant="secondary"
+              busy={settlingId === debt.payerId}
+              onPress={() => void settleWith(debt.payerId)}
+            >
+              Mark as paid
+            </Button>
+          </View>
+        ))}
+        <Message error>{actionError}</Message>
+        <Message>
+          Marking as paid tells them you've paid. The money itself is settled
+          outside the app.
+        </Message>
       </BottomSheet>
     </View>
   );

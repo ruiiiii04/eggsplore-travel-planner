@@ -19,7 +19,7 @@ test("calendar aligns Monday weeks, leap days and month endings", () => {
 test("budget parses formatted amounts and adjusts both bounds without crossing", () => {
   assert.deepEqual(parseBudget(formatBudget(1000, 2000)), [1000, 2000]);
   assert.deepEqual(adjustBudget([1000, 2000], 0, 2700), [2000, 2000]);
-  assert.deepEqual(adjustBudget([1000, 2000], 1, 10100), [1000, 10000]);
+  assert.deepEqual(adjustBudget([1000, 2000], 1, 30100), [1000, 30000]);
   assert.deepEqual(adjustBudget([1000, 2000], 0, 100), [1000, 2000]);
   assert.deepEqual(adjustBudget([1000, 2000], 1, 3760), [1000, 3800]);
 });

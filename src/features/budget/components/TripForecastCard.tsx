@@ -1,6 +1,7 @@
 import { Text } from "react-native";
 import { Card } from "@/components/ui";
-import { compareBudget, estimateTripCost, formatRange } from "../estimates";
+import { compareBudget, estimateFromProfile, formatRange } from "../estimates";
+import { useCostProfile } from "../useCostProfile";
 
 type Props = {
   destination: string | null;
@@ -15,7 +16,8 @@ export function TripForecastCard({
   endDate,
   budget,
 }: Props) {
-  const estimate = estimateTripCost(destination, startDate, endDate);
+  const { profile, source, loading } = useCostProfile(destination);
+  const estimate = estimateFromProfile(profile, startDate, endDate);
 
   if (!estimate) {
     return (
@@ -25,6 +27,19 @@ export function TripForecastCard({
         </Text>
         <Text className="text-xs text-muted">
           Add trip dates to see an estimate.
+        </Text>
+      </Card>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <Text className="text-sm font-semibold text-ink">
+          Estimated trip cost
+        </Text>
+        <Text className="text-xs text-muted">
+          Estimating costs for {destination}...
         </Text>
       </Card>
     );
@@ -42,11 +57,10 @@ export function TripForecastCard({
       </Text>
       <Text className="text-xs text-muted">
         Rough estimate per person for {estimate.days} days, excluding flights.
+        {source === "ai" ? " AI-assisted." : ""}
       </Text>
       {fit === null && (
-        <Text className="text-sm text-muted">
-          Set a budget to compare.
-        </Text>
+        <Text className="text-sm text-muted">Set a budget to compare.</Text>
       )}
       {fit === "tight" && (
         <Text className="text-sm font-semibold text-danger">

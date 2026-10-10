@@ -60,3 +60,67 @@ export function initialsOf(name: string | null): string {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
+
+
+export type DebtLine = { splitId: string; title: string; amount: number };
+export type Debt = { payerId: string; total: number; lines: DebtLine[] };
+
+// What the user still owes, grouped by who paid, largest debt first.
+export function debtBreakdown(
+  userId: string,
+  expenses: Pick<Expense, "id" | "paid_by" | "title">[],
+  splits: Pick<
+    ExpenseSplit,
+    "id" | "expense_id" | "user_id" | "amount_owed" | "settled"
+  >[],
+): Debt[] {
+  const byId = new Map(expenses.map((e) => [e.id, e]));
+  const debts = new Map<string, Debt>();
+  for (const split of splits) {
+    if (split.user_id !== userId || split.settled) continue;
+    const expense = byId.get(split.expense_id);
+    if (!expense || !expense.paid_by || expense.paid_by === userId) continue;
+    const debt = debts.get(expense.paid_by) ?? {
+      payerId: expense.paid_by,
+      total: 0,
+      lines: [],
+    };
+    debt.lines.push({
+      splitId: split.id,
+      title: expense.title,
+      amount: split.amount_owed,
+    });
+    debt.total = Math.round((debt.total + split.amount_owed) * 100) / 100;
+    debts.set(expense.paid_by, debt);
+  }
+  return Array.from(debts.values()).sort((a, b) => b.total - a.total);
+}
+
+export type RelatedExpense<T> = { expense: T; myShare: number | null };
+
+// An expense relates to you if you paid it, logged it, or have a share in it.
+export function relatedExpenses<
+  T extends Pick<Expense, "id" | "paid_by" | "created_by">,
+>(
+  userId: string,
+  expenses: T[],
+  splits: Pick<ExpenseSplit, "expense_id" | "user_id" | "amount_owed">[],
+): RelatedExpense<T>[] {
+  const cents = new Map<string, number>();
+  for (const split of splits) {
+    if (split.user_id !== userId) continue;
+    cents.set(
+      split.expense_id,
+      (cents.get(split.expense_id) ?? 0) + Math.round(split.amount_owed * 100),
+    );
+  }
+  return expenses
+    .filter(
+      (e) =>
+        e.paid_by === userId || e.created_by === userId || cents.has(e.id),
+    )
+    .map((expense) => ({
+      expense,
+      myShare: cents.has(expense.id) ? cents.get(expense.id)! / 100 : null,
+    }));
+}
