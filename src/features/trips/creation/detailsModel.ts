@@ -1,4 +1,4 @@
-export const budgetLimits = { min: 1000, max: 10000, step: 100 };
+export const budgetLimits = { min: 1000, max: 30000, step: 100 };
 export function parseBudget(value: string): [number, number] {
   const amounts =
     value.match(/\d[\d,]*/g)?.map((v) => Number(v.replace(/,/g, ""))) ?? [];

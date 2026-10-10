@@ -22,13 +22,14 @@ import {
   UsersRound,
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BottomSheet, Button, Field, Message } from "@/components/ui";
+import { BottomSheet, Button, Message } from "@/components/ui";
 import { useTrips } from "@/features/trips/useTrips";
 import { tripStatus, type TripStatus } from "@/features/trips/model";
 import type { Trip } from "@/features/trips/model";
 import { useAuth } from "@/features/auth/useAuth";
 import { useProfile } from "@/features/profile/useProfile";
-import { getSupabase } from "@/lib/supabase";
+// import { getSupabase } from "@/lib/supabase";
+import { NotificationBell } from "@/features/notifications/NotificationBell";
 
 const purple = "#7C4DBE";
 const ink = "#3B1454";
@@ -175,13 +176,14 @@ export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const heroScale = Math.min(windowWidth, 402) / 402;
   const [filter, setFilter] = useState<TripStatus | "All">("All");
-  const [sheet, setSheet] = useState<"notifications" | "expense" | "emergency" | "message" | null>(null);
+  // const [sheet, setSheet] = useState<"notifications" | "expense" | "emergency" | "message" | null>(null);
+  const [sheet, setSheet] = useState<"notifications" | "emergency" | "message" | null>(null);
   const [quickMessage, setQuickMessage] = useState("");
-  const [expenseTitle, setExpenseTitle] = useState("");
-  const [expenseAmount, setExpenseAmount] = useState("");
-  const [expenseCategory, setExpenseCategory] = useState("");
-  const [expenseBusy, setExpenseBusy] = useState(false);
-  const [expenseError, setExpenseError] = useState("");
+  // const [expenseTitle, setExpenseTitle] = useState("");
+  // const [expenseAmount, setExpenseAmount] = useState("");
+  // const [expenseCategory, setExpenseCategory] = useState("");
+  // const [expenseBusy, setExpenseBusy] = useState(false);
+  // const [expenseError, setExpenseError] = useState("");
   const { trips, loading, error, refresh } = useTrips();
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -189,47 +191,57 @@ export default function HomeScreen() {
   const currentTrip = trips.find((trip) => tripStatus(trip) === "Live") ?? trips.find((trip) => tripStatus(trip) === "Upcoming");
   const liveTrip = trips.find((trip) => tripStatus(trip) === "Live");
 
-  function openExpense() {
+  // function openExpense() {
+  //   if (!liveTrip) {
+  //     setQuickMessage("Add Expense is available while you have a live trip.");
+  //     setSheet("message");
+  //     return;
+  //   }
+  //   if (!user || liveTrip.owner_id !== user.id) {
+  //     setQuickMessage("Only the trip owner can add expenses right now.");
+  //     setSheet("message");
+  //     return;
+  //   }
+  //   setExpenseTitle("");
+  //   setExpenseAmount("");
+  //   setExpenseCategory("");
+  //   setExpenseError("");
+  //   setSheet("expense");
+  // }
+
+    function openExpense() {
     if (!liveTrip) {
       setQuickMessage("Add Expense is available while you have a live trip.");
       setSheet("message");
       return;
     }
-    if (!user || liveTrip.owner_id !== user.id) {
-      setQuickMessage("Only the trip owner can add expenses right now.");
-      setSheet("message");
-      return;
-    }
-    setExpenseTitle("");
-    setExpenseAmount("");
-    setExpenseCategory("");
-    setExpenseError("");
-    setSheet("expense");
+    void rememberTrip(liveTrip.id);
+    router.push({ pathname: "/add-expense", params: { tripId: liveTrip.id } });
   }
 
-  async function saveExpense() {
-    const amount = Number(expenseAmount.trim().replace(",", "."));
-    if (!liveTrip || !user) return;
-    if (!expenseTitle.trim()) { setExpenseError("Enter an expense name."); return; }
-    if (!Number.isFinite(amount) || amount <= 0) { setExpenseError("Enter an amount greater than zero."); return; }
-    setExpenseBusy(true);
-    setExpenseError("");
-    try {
-      const { error: saveError } = await getSupabase().from("expenses").insert({
-        trip_id: liveTrip.id,
-        paid_by: user.id,
-        title: expenseTitle.trim(),
-        amount,
-        category: expenseCategory.trim() || null,
-      });
-      if (saveError) throw saveError;
-      setSheet(null);
-    } catch (cause) {
-      setExpenseError(cause instanceof Error ? cause.message : "Could not save this expense.");
-    } finally {
-      setExpenseBusy(false);
-    }
-  }
+  // async function saveExpense() {
+  //   const amount = Number(expenseAmount.trim().replace(",", "."));
+  //   if (!liveTrip || !user) return;
+  //   if (!expenseTitle.trim()) { setExpenseError("Enter an expense name."); return; }
+  //   if (!Number.isFinite(amount) || amount <= 0) { setExpenseError("Enter an amount greater than zero."); return; }
+  //   setExpenseBusy(true);
+  //   setExpenseError("");
+  //   try {
+  //     const { error: saveError } = await getSupabase().from("expenses").insert({
+  //       trip_id: liveTrip.id,
+  //       paid_by: user.id,
+  //       title: expenseTitle.trim(),
+  //       amount,
+  //       category: expenseCategory.trim() || null,
+  //     });
+  //     if (saveError) throw saveError;
+  //     setSheet(null);
+  //   } catch (cause) {
+  //     setExpenseError(cause instanceof Error ? cause.message : "Could not save this expense.");
+  //   } finally {
+  //     setExpenseBusy(false);
+  //   }
+  // }
 
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
@@ -257,7 +269,7 @@ export default function HomeScreen() {
               </Text>
             </View>
           </View>
-          <Pressable
+          {/* <Pressable
             accessibilityRole="button"
             accessibilityLabel="Notifications"
             onPress={() => setSheet("notifications")}
@@ -265,7 +277,8 @@ export default function HomeScreen() {
           >
             <Bell size={24} color={purple} />
             <View style={styles.notificationDot} />
-          </Pressable>
+          </Pressable> */}
+            <NotificationBell />
         </View>
 
         <View style={[styles.hero, { height: 131 * heroScale }]}>
@@ -432,18 +445,20 @@ export default function HomeScreen() {
       </ScrollView>
       <BottomSheet
         visible={!!sheet}
-        title={sheet === "expense" ? "Add Expense" : sheet === "emergency" ? "Emergency Info" : sheet === "message" ? "Quick access" : "Notifications"}
+        // title={sheet === "expense" ? "Add Expense" : sheet === "emergency" ? "Emergency Info" : sheet === "message" ? "Quick access" : "Notifications"}
+        title={sheet === "emergency" ? "Emergency Info" : sheet === "message" ? "Quick access" : "Notifications"}
         onClose={() => setSheet(null)}
-        busy={expenseBusy}
+        // busy={expenseBusy}
       >
-        {sheet === "expense" ? <>
+        {/* {sheet === "expense" ? <>
           <Text style={{ color: muted, fontSize: 13 }}>Quickly record an expense for {liveTrip?.title ?? "your live trip"}.</Text>
           <Field label="Expense name" value={expenseTitle} onChangeText={setExpenseTitle} placeholder="e.g. Dinner" />
           <Field label="Amount (RM)" value={expenseAmount} onChangeText={setExpenseAmount} placeholder="0.00" keyboardType="decimal-pad" />
           <Field label="Category (optional)" value={expenseCategory} onChangeText={setExpenseCategory} placeholder="Food, transport…" />
           {!!expenseError && <Message error>{expenseError}</Message>}
-          <Button busy={expenseBusy} onPress={saveExpense}>Save Expense</Button>
-        </> : sheet === "emergency" ? <>
+          <Button busy={expenseBusy} onPress={saveExpense}>Save Expense</Button> */}
+        {/* </> : sheet === "emergency" ? <> */}
+          {sheet === "emergency" ? <>
           <Text style={{ color: muted, fontSize: 13 }}>Your personal emergency contact details saved in Profile.</Text>
           {profile?.emergency_contact.name || profile?.emergency_contact.phone ? <View style={styles.infoCard}>
             {!!profile.emergency_contact.name && <Text style={styles.infoTitle}>{profile.emergency_contact.name}{profile.emergency_contact.relationship ? ` · ${profile.emergency_contact.relationship}` : ""}</Text>}

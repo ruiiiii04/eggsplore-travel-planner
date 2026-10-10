@@ -71,6 +71,7 @@ export function BudgetRange({
               }
               onEndEditing={() => commit(bound, Number(inputs[bound]))}
               onSubmitEditing={() => commit(bound, Number(inputs[bound]))}
+              onBlur={() => commit(bound, Number(inputs[bound]))}
               style={{
                 minHeight: 44,
                 borderWidth: 1,
@@ -172,13 +173,14 @@ export function BudgetRange({
       </View>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <Text style={{ color: "#857695", fontSize: 11 }}>RM 1,000</Text>
-        <Text style={{ color: "#857695", fontSize: 11 }}>RM 10,000</Text>
+        <Text style={{ color: "#857695", fontSize: 11 }}>{`RM ${budgetLimits.max.toLocaleString("en-MY")}`}</Text>
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {[
           [1000, 2000],
           [2000, 5000],
           [5000, 10000],
+          [10000, 20000],
         ].map(([min, max]) => (
           <Pressable
             key={min}
