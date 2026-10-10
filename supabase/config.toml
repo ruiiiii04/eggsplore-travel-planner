@@ -422,3 +422,6 @@ verify_jwt = true
 
 [functions.send-trip-invitations]
 verify_jwt = true
+
+[functions.estimate-costs]
+verify_jwt = true

@@ -10,6 +10,8 @@ import { errorMessage } from "@/lib/errors";
 import { validateTrip } from "@/features/trips/model";
 import { CreationHeader, tripColors } from "./CreationUI";
 import { useTripCreation } from "./TripCreationContext";
+import { saveBudget } from "@/features/budget/api";
+import { parseBudget } from "./detailsModel";
 
 const itineraryTasks = ["Drafting your day-by-day plan", "Saving your trip", "Saving itinerary activities", "Finishing your trip"];
 const flexibleTasks = ["Preparing your flexible trip", "Saving your trip", "Finishing your trip"];
@@ -82,6 +84,14 @@ export default function CreatingScreen() {
         }).select("id").single();
         if (failure) throw failure;
         createdTripId.current = created.id;
+        // Seed the creator's own budget from the chosen range (midpoint).
+        // Never blocks trip creation: if this fails, the Budget tab asks instead.
+        const [budgetMin, budgetMax] = parseBudget(data.budget);
+        void saveBudget(
+          created.id,
+          user.id,
+          Math.round((budgetMin + budgetMax) / 2),
+        ).catch(() => undefined);
       }
 
       setProgressStep(2);

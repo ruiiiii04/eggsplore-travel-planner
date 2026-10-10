@@ -20,6 +20,7 @@ import { useTripCreation } from "./TripCreationContext";
 
 import { CalendarDateField } from "./CalendarDateField";
 import { BudgetRange } from "./BudgetRange";
+import { CostEstimateText } from "@/features/budget/components/CostEstimateText";
 
 const destinations = ["Bali", "Tokyo", "Seoul", "Bangkok"];
 
@@ -192,9 +193,12 @@ export default function TravelDetailsScreen() {
               Estimated cost for {data.destination || "your trip"}
               {dateSummary(data.startDate, data.endDate)}
             </Text>
-            <Text style={styles.estimateBody}>
-              Flights + stay typically range RM 1,800 – RM 4,200
-            </Text>
+                        <CostEstimateText
+              destination={data.destination}
+              startDate={data.startDate}
+              endDate={data.endDate}
+              style={styles.estimateBody}
+            />
           </View>
         </View>
       </View>
