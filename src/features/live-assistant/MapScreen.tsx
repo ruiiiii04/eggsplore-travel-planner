@@ -33,6 +33,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import TripMap from "./components/TripMap";
 import PlaceDetailsSheet from "./components/PlaceDetailsSheet";
 import { useExplorePlaces } from "./hooks/useExplorePlaces";
+import { NotificationBell } from "@/features/notifications/NotificationBell";
 
 // CHANGED: remount user-scoped map state after an account change.
 export default function MapScreen() {
@@ -233,7 +234,7 @@ function TripMapScreen() {
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={s.bell}
           accessibilityRole="button"
           accessibilityLabel="Trip alerts"
@@ -247,7 +248,8 @@ function TripMapScreen() {
         >
           <Bell size={24} color="#61368B" />
           <View style={s.dot} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
+          <NotificationBell />
       </View>
 
       {/* CHANGED: selectable saved trips. */}
