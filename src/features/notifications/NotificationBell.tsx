@@ -1,12 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Bell } from "lucide-react-native";
+import { useAuth } from "@/features/auth/useAuth";
 import { NotificationSheet } from "./NotificationSheet";
 import { useNotifications } from "./useNotifications";
+import { runWeatherCheck } from "./weatherCheck";
 
 export function NotificationBell() {
+  const { user } = useAuth();
   const notifications = useNotifications();
   const [open, setOpen] = useState(false);
+  const { refresh } = notifications;
+
+  function checkWeather(force: boolean) {
+    void runWeatherCheck({ force }).then((created) => {
+      if (created) refresh();
+    });
+  }
+
+  useEffect(() => {
+    if (user) checkWeather(false);
+  }, [user?.id]);
 
   return (
     <>
@@ -18,7 +32,8 @@ export function NotificationBell() {
             : "Notifications"
         }
         onPress={() => {
-          notifications.refresh();
+          refresh();
+          checkWeather(true);
           setOpen(true);
         }}
         style={{

@@ -28,6 +28,8 @@ import { getSupabase } from "@/lib/supabase";
 import { errorMessage } from "@/lib/errors";
 import { useProfile } from "./useProfile";
 import { updateProfile } from "./service";
+import { NotificationBell } from "@/features/notifications/NotificationBell";
+
 type Sheet =
   | "edit"
   | "password"
@@ -228,13 +230,14 @@ export default function ProfileScreen() {
     <Screen>
       <View className="flex-row items-center justify-between gap-3">
         <Heading>EGGSPLORE</Heading>
-        <Button
+        {/* <Button
           variant="ghost"
           accessibilityLabel="Notifications"
           onPress={() => open("notifications")}
         >
           <Bell color="#7E49C2" size={22} />
-        </Button>
+        </Button> */}
+        <NotificationBell />
       </View>
       <View className="flex-row items-center gap-4">
         {profile?.avatar_url && brokenAvatar !== profile.avatar_url ? (

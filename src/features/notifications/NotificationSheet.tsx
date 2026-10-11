@@ -1,9 +1,11 @@
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Bell, Check, Plane, ReceiptText } from "lucide-react-native";
+// import { Bell, Check, Plane, ReceiptText } from "lucide-react-native";
+import { Bell, Check, CloudRain, Plane, ReceiptText } from "lucide-react-native";
 import { BottomSheet, Button, Message } from "@/components/ui";
 import { timeAgo, type AppNotification } from "./model";
 import type { useNotifications } from "./useNotifications";
+// import { DemoTools } from "./DemoTools";
 
 type Props = {
   visible: boolean;
@@ -16,6 +18,7 @@ function iconFor(type: string) {
   if (type === "expense_added") return <ReceiptText {...props} />;
   if (type === "debt_paid") return <Check {...props} />;
   if (type === "flight_delay") return <Plane {...props} />;
+  if (type === "weather_alert") return <CloudRain {...props} />;
   return <Bell {...props} />;
 }
 
@@ -24,7 +27,7 @@ function go(item: AppNotification) {
   const id = item.tripId;
   if (item.type === "note_reminder") {
     router.push({ pathname: "/trips/[id]/my-notes", params: { id } });
-  } else if (item.type === "flight_delay") {
+} else if (item.type === "flight_delay" || item.type === "weather_alert") {
     router.push({ pathname: "/trips/[id]/itinerary", params: { id } });
   } else {
     router.push({ pathname: "/trips/[id]/budget", params: { id } });
@@ -87,6 +90,10 @@ export function NotificationSheet({ visible, onClose, notifications }: Props) {
           {!item.read && <View className="w-2 h-2 rounded-full bg-brand mt-1.5" />}
         </Pressable>
       ))}
+            {items.some((n) => n.type === "weather_alert") && (
+        <Text className="text-xs text-muted">Weather data by Open-Meteo.com</Text>
+      )}
+      {/* <DemoTools onDone={refresh} /> */}
     </BottomSheet>
   );
 }
