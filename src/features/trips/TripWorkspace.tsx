@@ -1,7 +1,7 @@
 import LocationField from "./location/LocationField";
 import { parseLocation, parseLocationParam, savedLocationColumns, type ActivityLocation } from "./location/model";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Image, Linking, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ArrowDown, ArrowLeft, ArrowUp, Bell, CalendarDays, Check, ChevronDown, ChevronRight, Circle, Cloud, Luggage, MapPin, MoreHorizontal, Pencil, Plane, Plus, SquareCheckBig, ThumbsDown, ThumbsUp, TrainFront, Umbrella, Utensils, UsersRound, Wallet, Lightbulb, BedDouble, Camera, Trash2, GripVertical, X, UserRoundPlus, LogOut } from "lucide-react-native";
@@ -29,6 +29,7 @@ type TripAction = { kind: "delete-trip" } | { kind: "leave-trip" } | { kind: "re
 const itineraryFields = "id,title,description,activity_category,location_name,start_time,position,latitude,longitude,location_provider,location_provider_id,location_address,location_categories";
 const activityCategories = [["sightseeing", "Attraction", Camera], ["food", "Food", Utensils], ["transport", "Transport", TrainFront], ["stay", "Stay", BedDouble]] as const;
 const noteCategories = [["reminder", "Reminder", Check], ["packing", "Packing", Luggage], ["idea", "Idea", Lightbulb], ["general", "General", Pencil]] as const;
+const FLIGHT_STATUS_URL = "https://www.malaysiaairports.com.my/en/klia1/flight-information/departures";
 const ink = "#37134F", purple = "#8050C5", muted = "#89789D", line = "#EEE7F5", pale = "#F5F0FB";
 const formLabel = { color: ink, fontSize: 12, fontWeight: "700" as const, marginBottom: -9 };
 const formInput = { minHeight: 46, borderRadius: 13, borderWidth: 1, borderColor: line, backgroundColor: "white", paddingHorizontal: 13, color: ink, fontSize: 14 };
@@ -504,8 +505,8 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
       {!items.length && <Text style={{ color: muted, fontSize: 12 }}>No activities yet. Add your first activity or publish your selected candidates.</Text>}
       <Button onPress={() => { setEditItineraryOpen(false); openAdd("activity"); }}>Add Activity</Button>
     </BottomSheet>
-    <BottomSheet visible={manageOpen} title="Trip members" onClose={() => { if (!managementBusy) setManageOpen(false); }} busy={managementBusy}>
-      <Text style={{ color: muted, fontSize: 12, lineHeight: 18 }}>View who is on this trip and add friends by their Eggsplore username.</Text>
+    <BottomSheet visible={manageOpen} title="Trip details" onClose={() => { if (!managementBusy) setManageOpen(false); }} busy={managementBusy}>
+      <Text style={{ color: muted, fontSize: 12, lineHeight: 18 }}>View who is on this trip, add friends by their Eggsplore username and check your flight status.</Text>
       <View style={{ gap: 9 }}>
           {tripMembers.map((member) => <View key={member.user_id} style={{ minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: 1, borderBottomColor: line, paddingVertical: 7 }}>
           <View style={{ width: 38, height: 38, borderRadius: 20, backgroundColor: pale, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>{member.avatar_url ? <Image source={{ uri: member.avatar_url }} style={{ width: 38, height: 38 }} /> : <Text style={{ color: purple, fontWeight: "700", fontSize: 14 }}>{(member.display_name || member.username).slice(0, 1).toUpperCase()}</Text>}</View>
@@ -523,6 +524,14 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
         </View>
         {memberMatch && <View style={{ minHeight: 52, borderRadius: 14, backgroundColor: pale, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 }}><UsersRound size={17} color={purple} /><View style={{ flex: 1 }}><Text style={{ color: ink, fontSize: 12, fontWeight: "700" }}>{memberMatch.display_name || memberMatch.username}</Text><Text style={{ color: muted, fontSize: 10 }}>@{memberMatch.username}</Text></View><Pressable accessibilityRole="button" disabled={managementBusy} onPress={() => void addTripMember()} style={{ minHeight: 34, borderRadius: 17, backgroundColor: "white", paddingHorizontal: 14, justifyContent: "center" }}><Text style={{ color: purple, fontSize: 11, fontWeight: "700" }}>Add</Text></Pressable></View>}
       </View>}
+      <View style={{ gap: 8, paddingTop: 4 }}>
+        <Text style={{ color: ink, fontSize: 12, fontWeight: "700" }}>Flight status</Text>
+        <Pressable accessibilityRole="link" accessibilityLabel="Check KLIA1 departures for flight delays" onPress={() => { void Linking.openURL(FLIGHT_STATUS_URL).catch(() => setManagementError("Could not open the flight information page.")); }} style={{ minHeight: 52, borderRadius: 14, backgroundColor: pale, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{ width: 32, height: 32, borderRadius: 11, backgroundColor: "white", alignItems: "center", justifyContent: "center" }}><Plane size={16} color={purple} /></View>
+          <View style={{ flex: 1 }}><Text style={{ color: ink, fontSize: 12, fontWeight: "700" }}>Check flight delays</Text></View>
+          <ChevronRight size={17} color={muted} />
+        </Pressable>
+      </View>
       {!!managementError && <Text accessibilityRole="alert" style={{ color: "#B43F60", fontSize: 11, lineHeight: 16 }}>{managementError}</Text>}
       <View style={{ borderTopWidth: 1, borderTopColor: line, paddingTop: 12, gap: 9 }}>
         {trip?.owner_id === user?.id ? <Pressable accessibilityRole="button" onPress={() => requestTripAction({ kind: "delete-trip" })} style={{ minHeight: 46, borderRadius: 24, backgroundColor: "#FFF2F4", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }}><Trash2 size={16} color="#B43F60" /><Text style={{ color: "#B43F60", fontWeight: "700", fontSize: 12 }}>Delete trip</Text></Pressable> : <Pressable accessibilityRole="button" onPress={() => requestTripAction({ kind: "leave-trip" })} style={{ minHeight: 46, borderRadius: 24, backgroundColor: pale, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }}><LogOut size={16} color={purple} /><Text style={{ color: purple, fontWeight: "700", fontSize: 12 }}>Leave trip</Text></Pressable>}
