@@ -21,7 +21,7 @@ export function TripForecastCard({
 
   if (!estimate) {
     return (
-      <Card>
+      <Card className="rounded-2xl border-[#EEE7F5]">
         <Text className="text-sm font-semibold text-ink">
           Estimated trip cost
         </Text>
@@ -34,7 +34,7 @@ export function TripForecastCard({
 
   if (loading) {
     return (
-      <Card>
+      <Card className="rounded-2xl border-[#EEE7F5]">
         <Text className="text-sm font-semibold text-ink">
           Estimated trip cost
         </Text>
@@ -48,7 +48,7 @@ export function TripForecastCard({
   const fit = budget === null ? null : compareBudget(budget, estimate);
 
   return (
-    <Card>
+    <Card className="rounded-2xl border-[#EEE7F5]">
       <Text className="text-sm font-semibold text-ink">
         Estimated trip cost
       </Text>

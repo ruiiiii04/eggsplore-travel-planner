@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 // import { Camera, ChevronLeft, Save } from "lucide-react-native";
-import { ChevronLeft, Save } from "lucide-react-native";
+import { AlertCircle, ChevronLeft, Save } from "lucide-react-native";
 import { Screen, Button, Card, Message } from "@/components/ui";
 import { useAuth } from "@/features/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
 import { CategoryPicker } from "./components/CategoryPicker";
+import { EXPENSE_CATEGORIES } from "./components/expenseCategories";
 import { CurrencyField } from "./components/CurrencyField";
 import { SplitWithPicker, type Member } from "./components/SplitWithPicker";
 import { SelectField, type SelectOption } from "./components/SelectField";
@@ -52,7 +53,7 @@ export default function AddExpenseScreen() {
     splitType?: string;
   }>();
   const { user } = useAuth();
-  const { data } = useBudget(params.tripId);
+  const { data, loading, error: loadError, refresh } = useBudget(params.tripId);
   const { profile: costProfile } = useCostProfile(
     data?.trip.destination ?? null,
   );
@@ -61,7 +62,9 @@ export default function AddExpenseScreen() {
   const [amountText, setAmountText] = useState("");
   const [currency, setCurrency] = useState<CurrencySelection>(DEFAULT_CURRENCY);
   const [category, setCategory] = useState<ExpenseCategory | null>(
-    (params.category as ExpenseCategory) ?? null,
+    EXPENSE_CATEGORIES.some((item) => item.key === params.category)
+      ? (params.category as ExpenseCategory)
+      : null,
   );
   const [customCategoryLabel, setCustomCategoryLabel] = useState("");
   const [paidByChoice, setPaidByChoice] = useState<string | null>(null);
@@ -138,6 +141,10 @@ export default function AddExpenseScreen() {
   async function handleSave() {
     if (!user || !params.tripId) {
       setError("No trip selected. Go back and open the Budget page again.");
+      return;
+    }
+    if (!data || loading) {
+      setError("Trip members are still loading. Try again in a moment.");
       return;
     }
 
@@ -222,29 +229,42 @@ export default function AddExpenseScreen() {
       </View>
 
       {data?.trip && (
-        <View className="self-center rounded-full bg-lavender px-3 py-1.5">
+        <View className="self-center rounded-full border border-line bg-lavender px-3 py-1.5">
           <Text numberOfLines={1} className="text-xs font-semibold text-brand">
             Adding to: {data.trip.title}
           </Text>
         </View>
       )}
 
-      <View className="gap-1">
-        <Text className="text-xs text-muted">Total Amount</Text>
-        <View className="flex-row items-center justify-center gap-1">
-          <CurrencyField value={currency} onChange={changeCurrency} />
-          <TextInput
-            keyboardType={currency.decimals > 0 ? "decimal-pad" : "number-pad"}
-            value={amountText}
-            onChangeText={(text) =>
-              setAmountText(sanitizeAmount(text, currency.decimals))
-            }
-            placeholder={currency.decimals > 0 ? "0.00" : "0"}
-            placeholderTextColor="#D8C1F0"
-            className="text-4xl font-bold text-ink text-center"
-            style={{ minWidth: 60, paddingHorizontal: 0 }}
-          />
+      {!data && loading && (
+        <Card className="flex-row items-center gap-2 rounded-2xl border-[#EEE7F5]">
+          <AlertCircle size={17} color="#8050C5" />
+          <Text className="flex-1 text-sm text-muted">Loading trip and member details…</Text>
+        </Card>
+      )}
+      {!data && !!loadError && (
+        <View className="gap-2">
+          <Message error>{loadError}</Message>
+          <Button variant="secondary" onPress={refresh}>Retry loading trip</Button>
         </View>
+      )}
+
+      <View className="gap-2 rounded-2xl border border-[#E8D9F5] bg-[#F5F0FB] p-4">
+        <View className="flex-row items-center justify-between">
+          <Text className="text-xs font-semibold text-muted">TOTAL AMOUNT</Text>
+          <CurrencyField value={currency} onChange={changeCurrency} />
+        </View>
+        <TextInput
+          keyboardType={currency.decimals > 0 ? "decimal-pad" : "number-pad"}
+          value={amountText}
+          onChangeText={(text) =>
+            setAmountText(sanitizeAmount(text, currency.decimals))
+          }
+          placeholder={currency.decimals > 0 ? "0.00" : "0"}
+          placeholderTextColor="#C9AFE4"
+          className="text-4xl font-bold text-ink text-center"
+          style={{ minWidth: 60, paddingHorizontal: 0 }}
+        />
         {currency.code !== "RM" && (
           <Text className="text-xs text-muted text-center">
             {previewRM > 0 ? `≈ RM ${previewRM.toFixed(2)} · ` : ""}1{" "}
@@ -254,7 +274,8 @@ export default function AddExpenseScreen() {
         )}
       </View>
 
-      <Card>
+      <Card className="rounded-2xl border-[#EEE7F5]">
+        <Text className="text-sm font-semibold text-ink">Expense details</Text>
         <Text className="text-xs font-semibold text-muted">DESCRIPTION</Text>
         <View className="flex-row items-center gap-2">
           <TextInput
@@ -302,7 +323,7 @@ export default function AddExpenseScreen() {
       </Card>
 
       {loaded && !isSolo && (
-        <Card>
+        <Card className="rounded-2xl border-[#EEE7F5]">
           <View className="flex-row items-center justify-between">
             <View>
               <Text className="text-xs font-semibold text-muted">PAID BY</Text>
@@ -349,7 +370,7 @@ export default function AddExpenseScreen() {
       )}
 
       {isSolo && (
-        <Card>
+        <Card className="rounded-2xl border-[#EEE7F5]">
           <Text className="text-sm font-semibold text-ink">Solo trip</Text>
           <Text className="text-xs text-muted">
             This expense comes out of your own budget.
@@ -359,7 +380,7 @@ export default function AddExpenseScreen() {
 
       <Message error>{error}</Message>
 
-      <Button busy={saving} onPress={handleSave}>
+      <Button busy={saving} disabled={!data || loading || !!loadError} onPress={handleSave} className="rounded-xl">
         <Save size={18} color="white" />
         <Text className="text-white font-semibold">Save Expense</Text>
       </Button>

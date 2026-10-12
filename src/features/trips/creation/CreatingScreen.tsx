@@ -12,6 +12,7 @@ import { CreationHeader, tripColors } from "./CreationUI";
 import { useTripCreation } from "./TripCreationContext";
 import { saveBudget } from "@/features/budget/api";
 import { parseBudget } from "./detailsModel";
+import { tripPreferencePayload } from "./preferences";
 
 const itineraryTasks = ["Drafting your day-by-day plan", "Saving your trip", "Saving itinerary activities", "Finishing your trip"];
 const flexibleTasks = ["Preparing your flexible trip", "Saving your trip", "Finishing your trip"];
@@ -47,6 +48,10 @@ export default function CreatingScreen() {
       if (tripDays > 14) throw new Error("AI itinerary generation currently supports trips up to 14 days.");
 
       const client = getSupabase();
+      const selectedPreferences = tripPreferencePayload(
+        data.preference,
+        data.customPreferences,
+      );
       if (hasDates && !itineraryDraft.current) {
         setProgressStep(0);
         const { data: generated, error: generationError } = await client.functions.invoke("generate-itinerary", {
@@ -56,7 +61,7 @@ export default function CreatingScreen() {
             endDate,
             tripType: data.tripType || "solo",
             budget: data.budget,
-            preferences: data.preference === "Custom" ? data.customPreferences : [data.preference].filter(Boolean),
+            preferences: selectedPreferences.generationPreferences,
           },
         });
         if (generationError) {
@@ -81,6 +86,7 @@ export default function CreatingScreen() {
           destination: data.destination.trim(),
           start_date: hasDates ? startDate : null,
           end_date: hasDates ? endDate : null,
+          travel_preferences: selectedPreferences.travelPreferences,
         }).select("id").single();
         if (failure) throw failure;
         createdTripId.current = created.id;

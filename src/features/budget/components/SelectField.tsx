@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { ChevronDown } from "lucide-react-native";
 import { BottomSheet } from "@/components/ui";
 
 export type SelectOption = { id: string; label: string };
@@ -30,7 +31,7 @@ export function SelectField({
         <Text className="text-xs font-semibold text-brand">
           {value ? value.label : placeholder}
         </Text>
-        <Text className="text-xs text-brand ml-1">▾</Text>
+        <ChevronDown size={14} color="#8050C5" />
       </Pressable>
 
       <BottomSheet visible={open} title={label} onClose={() => setOpen(false)}>

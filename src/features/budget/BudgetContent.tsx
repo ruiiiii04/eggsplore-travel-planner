@@ -15,14 +15,7 @@ import { saveBudget, setSplitsSettled } from "./api";
 import { debtBreakdown, mySpent, relatedExpenses } from "./ledger";
 import { useBudget } from "./useBudget";
 import type { ExpenseCategory } from "./model";
-
-const CATEGORY_OPTIONS: { key: ExpenseCategory; label: string; emoji: string }[] = [
-  { key: "food", label: "Food", emoji: "☕" },
-  { key: "transport", label: "Transport", emoji: "🚗" },
-  { key: "stay", label: "Stay", emoji: "🏠" },
-  { key: "activities", label: "Activities", emoji: "🖼️" },
-  { key: "shopping", label: "Shopping", emoji: "🛍️" },
-];
+import { EXPENSE_CATEGORIES } from "./components/expenseCategories";
 
 const SPLIT_OPTIONS: SelectOption[] = [
   { id: "evenly", label: "Split Evenly" },
@@ -148,9 +141,9 @@ export function BudgetContent({ tripId }: { tripId: string }) {
 
       {data && user && (
         <>
-          <View className="rounded-xl bg-lavender p-3 gap-3">
+          <View className="rounded-2xl border border-[#EEE7F5] bg-[#F5F0FB] p-3.5 gap-3">
             {budget === null ? (
-              <Card>
+              <Card className="rounded-2xl border-[#EEE7F5]">
                 <Text className="text-sm font-semibold text-ink">
                   No budget set yet
                 </Text>
@@ -205,7 +198,7 @@ export function BudgetContent({ tripId }: { tripId: string }) {
             budget={budget}
           />
 
-          <Card>
+          <Card className="rounded-2xl border-[#EEE7F5]">
             <View className="flex-row items-center justify-between">
               <Text className="text-base font-semibold text-ink">
                 Quick Add by Category
@@ -220,18 +213,23 @@ export function BudgetContent({ tripId }: { tripId: string }) {
               )}
             </View>
             <View className="flex-row justify-between">
-              {CATEGORY_OPTIONS.map((c) => (
-                <Pressable
-                  key={c.key}
-                  onPress={() => openCategory(c.key)}
-                  className="items-center gap-1"
-                >
-                  <View className="w-12 h-12 rounded-full items-center justify-center bg-lavender">
-                    <Text className="text-lg">{c.emoji}</Text>
-                  </View>
-                  <Text className="text-xs text-ink">{c.label}</Text>
-                </Pressable>
-              ))}
+              {EXPENSE_CATEGORIES.filter((c) => c.key !== "other").map((c) => {
+                const Icon = c.Icon;
+                return (
+                  <Pressable
+                    key={c.key}
+                    onPress={() => openCategory(c.key)}
+                    className="items-center gap-1"
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add ${c.label} expense`}
+                  >
+                    <View className="h-11 w-11 items-center justify-center rounded-2xl border border-line bg-lavender">
+                      <Icon size={19} color="#8050C5" strokeWidth={2} />
+                    </View>
+                    <Text className="text-[10px] text-muted">{c.label}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </Card>
 
@@ -290,7 +288,7 @@ export function BudgetContent({ tripId }: { tripId: string }) {
         {debtList.map((debt) => (
           <View
             key={debt.payerId}
-            className="gap-2 rounded-lg border border-line bg-white p-3"
+            className="gap-2 rounded-2xl border border-[#EEE7F5] bg-white p-3"
           >
             <View className="flex-row items-center justify-between">
               <Text className="text-base font-semibold text-ink">

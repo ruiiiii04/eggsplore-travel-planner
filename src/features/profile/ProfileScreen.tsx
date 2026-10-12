@@ -12,6 +12,7 @@ import {
   Phone,
   Globe,
   Ruler,
+  Sparkles,
 } from "lucide-react-native";
 import {
   Screen,
@@ -29,6 +30,7 @@ import { errorMessage } from "@/lib/errors";
 import { useProfile } from "./useProfile";
 import { updateProfile } from "./service";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
+import { TravelStyleIcon } from "./TravelStyleIcon";
 
 type Sheet =
   | "edit"
@@ -64,26 +66,55 @@ function Row({
   return (
     <Button
       variant="ghost"
-      className="justify-between border-b border-line rounded-none px-0"
+      className="min-h-[68px] justify-start gap-3 border-b border-[#F0EAF5] rounded-none px-1 py-2"
       onPress={onPress}
       disabled={disabled}
     >
-      {icon && <View className="rounded-full bg-lavender p-2">{icon}</View>}
+      {icon && (
+        <View className="h-10 w-10 items-center justify-center rounded-xl bg-lavender">
+          {icon}
+        </View>
+      )}
       <View className="flex-1 gap-1">
         <Text
           style={{ fontFamily: "Inter" }}
-          className="text-sm font-semibold text-muted"
+          className="text-sm font-semibold text-ink"
         >
           {title}
         </Text>
         {!!subtitle && (
-          <Text style={{ fontFamily: "Inter", fontSize: 11, color: "#A99AC6" }}>
+          <Text
+            style={{ fontFamily: "Inter", fontSize: 11, color: "#89789D" }}
+            numberOfLines={1}
+          >
             {subtitle}
           </Text>
         )}
       </View>
       <ChevronRight size={20} color="#7E49C2" />
     </Button>
+  );
+}
+
+function SectionHeader({
+  title,
+  subtitle,
+  icon,
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <View className="mb-1 flex-row items-center gap-3">
+      <View className="h-10 w-10 items-center justify-center rounded-xl bg-lavender">
+        {icon}
+      </View>
+      <View className="flex-1 gap-0.5">
+        <SectionTitle>{title}</SectionTitle>
+        <Text className="text-xs leading-5 text-muted">{subtitle}</Text>
+      </View>
+    </View>
   );
 }
 export default function ProfileScreen() {
@@ -239,39 +270,52 @@ export default function ProfileScreen() {
         </Button> */}
         <NotificationBell />
       </View>
-      <View className="flex-row items-center gap-4">
-        {profile?.avatar_url && brokenAvatar !== profile.avatar_url ? (
-          <Image
-            source={{ uri: profile.avatar_url }}
-            accessibilityLabel="Profile photo"
-            onError={() => setBrokenAvatar(profile.avatar_url)}
-            style={{ width: 64, height: 64, borderRadius: 32 }}
-          />
-        ) : (
-          <UserRound size={54} color="#817493" />
-        )}
+      <View className="flex-row items-center gap-3 rounded-2xl border border-[#E8D9F5] bg-[#F5F0FB] p-4">
+        <View className="h-[68px] w-[68px] items-center justify-center overflow-hidden rounded-2xl border border-white bg-white">
+          {profile?.avatar_url && brokenAvatar !== profile.avatar_url ? (
+            <Image
+              source={{ uri: profile.avatar_url }}
+              accessibilityLabel="Profile photo"
+              onError={() => setBrokenAvatar(profile.avatar_url)}
+              style={{ width: 68, height: 68 }}
+            />
+          ) : (
+            <UserRound size={32} color="#8050C5" />
+          )}
+        </View>
         <View className="flex-1 gap-1">
           <Text
             style={{ fontFamily: "Inter" }}
             className="text-lg font-bold text-ink"
+            numberOfLines={1}
           >
             {profile?.display_name || user?.email?.split("@")[0] || "Traveller"}
           </Text>
-          <Text style={{ fontFamily: "Inter" }} className="text-sm text-muted">
+          <Text
+            style={{ fontFamily: "Inter" }}
+            className="text-xs text-muted"
+            numberOfLines={1}
+          >
             {user?.email}
           </Text>
-          {!!profile?.username && <Text style={{ fontFamily: "Inter" }} className="text-sm text-muted">@{profile.username}</Text>}
-          <Text style={{ fontFamily: "Inter" }} className="text-sm text-brand">
-            Explorer
-          </Text>
+          {!!profile?.username && (
+            <Text
+              style={{ fontFamily: "Inter" }}
+              className="text-xs font-semibold text-brand"
+              numberOfLines={1}
+            >
+              @{profile.username}
+            </Text>
+          )}
         </View>
         <Button
-          variant="ghost"
+          variant="secondary"
           accessibilityLabel="Edit profile"
           disabled={unavailable}
           onPress={() => open("edit")}
+          className="min-h-10 rounded-xl px-3 py-2"
         >
-          <Pencil size={20} color="#7E49C2" />
+          <Pencil size={16} color="#7E49C2" />
         </Button>
       </View>
       {loading && <Message>Loading profile...</Message>}
@@ -282,14 +326,11 @@ export default function ProfileScreen() {
         </Button>
       )}
       <Message>{notice}</Message>
-      <View className="rounded-xl border border-line bg-white p-3">
-        <SectionTitle>Account</SectionTitle>
-        <Row
-          title="Edit Profile"
-          subtitle="Name, avatar, personal info"
-          icon={<UserRound size={18} color="#7C4DBE" />}
-          disabled={unavailable}
-          onPress={() => open("edit")}
+      <View className="gap-1 rounded-2xl border border-[#EEE7F5] bg-white p-4">
+        <SectionHeader
+          title="Security & account"
+          subtitle="Manage your sign-in details"
+          icon={<UserRound size={19} color="#8050C5" />}
         />
         <Row
           title="Change Password"
@@ -304,64 +345,80 @@ export default function ProfileScreen() {
           onPress={() => open("logout")}
         />
       </View>
-      <View className="gap-1 rounded-xl bg-lavender p-3">
-        <SectionTitle>My Preference Profiles</SectionTitle>
-        <Message>Save your travel styles for faster planning</Message>
-      </View>
-      {(profile?.preferences.profiles ?? []).map((item) => (
-        <Card key={item.id}>
-          <View className="flex-row items-center gap-3">
-            <Text style={{ fontFamily: "Inter" }} className="text-3xl">
-              {item.emoji}
-            </Text>
-            <View className="flex-1 gap-1">
-              <Text
-                style={{ fontFamily: "Inter" }}
-                className="text-base font-bold text-ink"
+      <View className="gap-1 rounded-2xl border border-[#EEE7F5] bg-white p-4">
+        <SectionHeader
+          title="Travel preferences"
+          subtitle="Save your travel styles for faster planning"
+          icon={<Sparkles size={19} color="#8050C5" />}
+        />
+        {(profile?.preferences.profiles ?? []).map((item) => (
+          <Card
+            key={item.id}
+            className="rounded-2xl border-[#EEE7F5] shadow-sm"
+          >
+            <View className="flex-row items-center gap-3">
+              <View className="h-12 w-12 items-center justify-center rounded-2xl bg-lavender">
+                <TravelStyleIcon category={item.category} size={23} />
+              </View>
+              <View className="flex-1 gap-1">
+                <Text
+                  style={{ fontFamily: "Inter" }}
+                  className="text-base font-bold text-ink"
+                >
+                  {item.name}
+                </Text>
+                <Text
+                  style={{ fontFamily: "Inter" }}
+                  className="text-sm text-muted"
+                  numberOfLines={2}
+                >
+                  {item.tags.join(" / ")}
+                </Text>
+              </View>
+              <Button
+                variant="ghost"
+                accessibilityLabel={`Edit ${item.name}`}
+                onPress={() =>
+                  router.push({
+                    pathname: "/profile/new",
+                    params: { id: item.id },
+                  })
+                }
               >
-                {item.name}
-              </Text>
-              <Text
-                style={{ fontFamily: "Inter" }}
-                className="text-sm text-muted"
-              >
-                {item.tags.join(" / ")}
-              </Text>
+                <Pencil size={20} color="#7E49C2" />
+              </Button>
             </View>
-            <Button
-              variant="ghost"
-              accessibilityLabel={`Edit ${item.name}`}
-              onPress={() =>
-                router.push({
-                  pathname: "/profile/new",
-                  params: { id: item.id },
-                })
-              }
-            >
-              <Pencil size={20} color="#7E49C2" />
-            </Button>
+          </Card>
+        ))}
+        {profile && !profile.preferences.profiles?.length && (
+          <View className="rounded-xl bg-[#FAF7FC] px-3 py-3">
+            <Text className="text-sm text-muted">
+              No saved travel style yet. Create one to personalize trip
+              suggestions.
+            </Text>
           </View>
-        </Card>
-      ))}
-      {profile && !profile.preferences.profiles?.length && (
-        <Message>No saved preference profiles yet.</Message>
-      )}
-      <Button
-        variant="secondary"
-        disabled={unavailable}
-        onPress={() => router.push("/profile/new")}
-      >
-        <Plus size={18} color="#7E49C2" />
-        <Text
-          style={{ fontFamily: "Inter" }}
-          className="text-brand font-semibold"
+        )}
+        <Button
+          variant="primary"
+          disabled={unavailable}
+          onPress={() => router.push("/profile/new")}
+          className="rounded-xl"
         >
-          Create New Profile
-        </Text>
-      </Button>
-      <View className="rounded-xl border border-line bg-white p-3">
-        <SectionTitle>Emergency &amp; Destination Info</SectionTitle>
-        <Message>Keep important contacts and numbers handy</Message>
+          <Plus size={18} color="white" />
+          <Text
+            style={{ fontFamily: "Inter" }}
+            className="font-semibold text-white"
+          >
+            Create New Profile
+          </Text>
+        </Button>
+      </View>
+      <View className="gap-1 rounded-2xl border border-[#EEE7F5] bg-white p-4">
+        <SectionHeader
+          title="Emergency & destination"
+          subtitle="Keep important contacts and travel notes handy"
+          icon={<Globe size={19} color="#8050C5" />}
+        />
         <Row
           title="Emergency Contacts"
           subtitle="Family, friends, emergency hotline"
@@ -377,9 +434,12 @@ export default function ProfileScreen() {
           onPress={() => open("destination")}
         />
       </View>
-      <View className="rounded-xl border border-line bg-white p-3">
-        <SectionTitle>App Settings</SectionTitle>
-        <Message>Personalize your Eggsplore experience</Message>
+      <View className="gap-1 rounded-2xl border border-[#EEE7F5] bg-white p-4">
+        <SectionHeader
+          title="App settings"
+          subtitle="Personalize your Eggsplore experience"
+          icon={<Ruler size={19} color="#8050C5" />}
+        />
         <Row
           title="Notifications"
           subtitle="Trip updates, reminders, alerts"
