@@ -6,7 +6,16 @@
     "scheme": "eggsplore",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-router", "expo-status-bar", ["expo-notifications", { "defaultChannel": "trip-reminders" }]],
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "trip-reminders"
+        }
+      ]
+    ],
     "android": {
       "package": "com.purplefeelings.eggsplore"
     },
@@ -16,6 +25,13 @@
     "web": {
       "bundler": "metro",
       "output": "single"
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b0b204dc-00b2-44e7-abed-d68e03e5ec50"
+      }
+    },
+    "owner": "ruiiiii04s-team"
   }
 }
