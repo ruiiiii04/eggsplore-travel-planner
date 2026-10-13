@@ -1,14 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 import type { ExpenseCategory } from "../model";
-
-const CATEGORIES: { key: ExpenseCategory; label: string; emoji: string }[] = [
-  { key: "food", label: "Food", emoji: "☕" },
-  { key: "transport", label: "Transport", emoji: "🚗" },
-  { key: "stay", label: "Stay", emoji: "🏠" },
-  { key: "activities", label: "Activities", emoji: "🖼️" },
-  { key: "shopping", label: "Shopping", emoji: "🛍️" },
-  { key: "other", label: "Other", emoji: "⋯" },
-];
+import { EXPENSE_CATEGORIES } from "./expenseCategories";
 
 type Props = {
   value: ExpenseCategory | null;
@@ -17,23 +9,35 @@ type Props = {
 
 export function CategoryPicker({ value, onChange }: Props) {
   return (
-    <View className="flex-row justify-between">
-      {CATEGORIES.map((c) => (
-        <Pressable
-          key={c.key}
-          onPress={() => onChange(c.key)}
-          className="items-center gap-1"
-        >
-          <View
-            className={`w-12 h-12 rounded-full items-center justify-center ${
-              value === c.key ? "bg-brand" : "bg-lavender"
-            }`}
+    <View className="flex-row flex-wrap gap-y-3">
+      {EXPENSE_CATEGORIES.map(({ key, label, Icon }) => {
+        const selected = value === key;
+        return (
+          <Pressable
+            key={key}
+            onPress={() => onChange(key)}
+            accessibilityRole="button"
+            accessibilityLabel={`${label} category`}
+            accessibilityState={{ selected }}
+            className="w-1/3 items-center gap-1"
           >
-            <Text className="text-lg">{c.emoji}</Text>
-          </View>
-          <Text className="text-xs text-ink">{c.label}</Text>
-        </Pressable>
-      ))}
+            <View
+              className={`h-11 w-11 items-center justify-center rounded-2xl border ${selected ? "border-brand bg-brand" : "border-line bg-lavender"}`}
+            >
+              <Icon
+                size={19}
+                color={selected ? "white" : "#8050C5"}
+                strokeWidth={2}
+              />
+            </View>
+            <Text
+              className={`text-xs ${selected ? "font-semibold text-brand" : "text-muted"}`}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

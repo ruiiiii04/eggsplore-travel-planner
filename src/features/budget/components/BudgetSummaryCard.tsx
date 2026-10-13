@@ -13,7 +13,7 @@ export function BudgetSummaryCard({ budget, spent, currency = "RM" }: Props) {
   const remaining = remainingBudget(spent, budget);
 
   return (
-    <Card>
+    <Card className="rounded-2xl border-[#EEE7F5]">
       <View className="flex-row items-start justify-between">
         <View>
           <Text className="text-sm text-muted">Total Budget</Text>

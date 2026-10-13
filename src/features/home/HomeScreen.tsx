@@ -1,3 +1,4 @@
+import OnlinePlaceImage from "@/components/OnlinePlaceImage";
 import { useState } from "react";
 import {
   Image,
@@ -86,16 +87,7 @@ function DestinationCard({
       style={[styles.tripCard, spacingAfter && styles.tripCardSpacing]}
     >
       <View style={[styles.tripPhoto, !cover && styles.tripPhotoFallback]}>
-        {cover ? (
-          <Image source={cover} resizeMode="cover" style={styles.tripCover} />
-        ) : (
-          <MapPin
-            size={88}
-            color="#B891DF"
-            strokeWidth={1.2}
-            style={styles.fallbackMapPin}
-          />
-        )}
+        <OnlinePlaceImage title={trip.destination ?? ""} source={trip.cover_url ? { uri: trip.cover_url } : undefined} fallback={cover} style={styles.tripCover} />
         <View
           style={[styles.photoShade, !cover && styles.fallbackPhotoShade]}
         />
@@ -209,14 +201,18 @@ export default function HomeScreen() {
   //   setSheet("expense");
   // }
 
-    function openExpense() {
-    if (!liveTrip) {
-      setQuickMessage("Add Expense is available while you have a live trip.");
+  function openExpense() {
+    const targetTrip = liveTrip ?? currentTrip;
+    if (!targetTrip) {
+      setQuickMessage("Create a trip before opening its budget.");
       setSheet("message");
       return;
     }
-    void rememberTrip(liveTrip.id);
-    router.push({ pathname: "/add-expense", params: { tripId: liveTrip.id } });
+    void rememberTrip(targetTrip.id);
+    router.navigate({
+      pathname: "/trips/[id]/budget",
+      params: { id: targetTrip.id, from: "home" },
+    });
   }
 
   // async function saveExpense() {
@@ -431,14 +427,14 @@ export default function HomeScreen() {
             <QuickAccess icon={<ThumbsUp size={28} color={purple} strokeWidth={1.8} />} label={["Pending", "Votes"]} onPress={() => {
               if (!currentTrip) { setQuickMessage("Create a trip to start voting on places."); setSheet("message"); return; }
               void rememberTrip(currentTrip.id);
-              router.push({ pathname: "/trips/[id]/candidates", params: { id: currentTrip.id, from: "home" } });
+              router.navigate({ pathname: "/trips/[id]/candidates", params: { id: currentTrip.id, from: "home" } });
             }} />
             <QuickAccess icon={<ShieldAlert size={28} color={purple} strokeWidth={1.8} />} label={["Emergency", "Info"]} onPress={() => setSheet("emergency")} />
             <QuickAccess icon={<UserRoundPlus size={28} color={purple} strokeWidth={1.8} />} label={["Invite", "Members"]} onPress={() => {
               const inviteTrip = trips.find(trip => trip.owner_id === user?.id && tripStatus(trip) !== "Past");
               if (!inviteTrip) { setQuickMessage("Create a trip as Group Leader to invite members."); setSheet("message"); return; }
               void rememberTrip(inviteTrip.id);
-              router.push({ pathname: "/trips/[id]/itinerary", params: { id: inviteTrip.id, from: "home", action: "invite" } });
+              router.navigate({ pathname: "/trips/[id]/itinerary", params: { id: inviteTrip.id, from: "home", action: "invite" } });
             }} />
           </View>
         </View>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ChevronDown } from "lucide-react-native";
 import { BottomSheet, Button, Message } from "@/components/ui";
 import {
   DEFAULT_CURRENCY,
@@ -63,7 +64,7 @@ export function CurrencyField({ value, onChange }: Props) {
         className="flex-row items-center rounded-full border border-line bg-lavender px-3 py-1.5"
       >
         <Text className="text-xs font-semibold text-brand">{value.code}</Text>
-        <Text className="text-xs text-brand ml-1">▾</Text>
+        <ChevronDown size={14} color="#8050C5" />
       </Pressable>
 
       <BottomSheet

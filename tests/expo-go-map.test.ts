@@ -28,11 +28,14 @@ function harness() {
     L: {},
     updateMap: undefined as undefined | ((data: unknown) => void),
   };
+  let tileAdds = 0;
+  let tileOptions: Record<string, unknown> = {};
+  const tileEvents: Record<string, () => void> = {};
   const L = {
     map: () => map,
     control: { attribution: layer },
     layerGroup: layer,
-    tileLayer: () => ({ ...layer(), on() {} }),
+    tileLayer: (_url: string, options: Record<string, unknown>) => { tileOptions = options; return { addTo() { tileAdds++; return this; }, on(type: string, callback: () => void) { tileEvents[type] = callback; } }; },
     circleMarker: () => {
       const marker = {
         ...layer(),
@@ -57,7 +60,7 @@ function harness() {
   const inline = mapDocument.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(inline);
   runInNewContext(inline, context);
-  return { context, messages, camera, markers, clickMap: (lat: number, lng: number) => mapClick?.({ latlng: { lat, lng } }) };
+  return { context, messages, camera, markers, tileOptions, tileEvents, tileAdds: () => tileAdds, clickMap: (lat: number, lng: number) => mapClick?.({ latlng: { lat, lng } }) };
 }
 const props: TripMapProps = {
   places: [place], selectedPlaceId: place.id, onSelectPlace() {},
@@ -102,4 +105,16 @@ test("manual map clicks send coordinates only when pin picking is enabled", () =
   runInNewContext(mapUpdateScript({ ...props, onSelectCoordinate() {} }), h.context);
   h.clickMap(37.5, 126.9);
   assert.deepEqual(h.messages.at(-1), { type: "coordinate", latitude: 37.5, longitude: 126.9 });
+});
+
+test("tiles identify the referring site and wait until the trip camera is set", () => {
+ const h = harness();
+ assert.equal(h.tileOptions.referrerPolicy, "strict-origin-when-cross-origin");
+ assert.equal(h.tileAdds(), 0);
+ runInNewContext(mapUpdateScript(props), h.context);
+ assert.equal(h.tileAdds(), 1);
+ runInNewContext(mapUpdateScript({ ...props, selectedPlaceId: null }), h.context);
+ assert.equal(h.tileAdds(), 1);
+ h.tileEvents.tileerror();
+ assert.deepEqual(h.messages.at(-1), { type: "error" });
 });

@@ -1,3 +1,4 @@
+import OnlinePlaceImage from "@/components/OnlinePlaceImage";
 import { router } from "expo-router";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MapPin, UsersRound } from "lucide-react-native";
@@ -50,13 +51,7 @@ export default function TripCreatedScreen() {
           Your adventure to {data.destination || "your destination"} is all set.
         </Text>
         <View style={styles.tripCard}>
-          {cover ? (
-            <Image source={cover} resizeMode="cover" style={styles.tripCover} />
-          ) : (
-            <View style={styles.coverFallback}>
-              <MapPin size={34} color="#B891DF" />
-            </View>
-          )}
+          <OnlinePlaceImage title={data.destination} fallback={cover ?? undefined} style={styles.tripCover} />
           <View style={styles.tripCopy}>
             <Text numberOfLines={1} style={styles.destination}>
               {data.destination || "Your destination"}

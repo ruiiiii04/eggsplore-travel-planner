@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { View, Text } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
-import { ArrowLeft, ArrowUp, ArrowDown } from "lucide-react-native";
+import { ArrowLeft, ArrowUp, ArrowDown, ChevronDown } from "lucide-react-native";
 import {
   Screen,
   Heading,
@@ -17,10 +17,7 @@ import { errorMessage } from "@/lib/errors";
 import { categories, companions, interestGroups } from "./options";
 import { readProfile, updateProfile } from "./service";
 import type { TravelPreference } from "./types";
-import {
-  memberCategoryWeights,
-  preferenceCategories,
-} from "../../../supabase/functions/_shared/preference-weights";
+import { TravelStyleIcon } from "./TravelStyleIcon";
 export default function PreferenceScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { user } = useAuth();
@@ -35,9 +32,7 @@ export default function PreferenceScreen() {
     "Transport",
   ]);
   const [interests, setInterests] = useState<string[]>([]);
-  const [categoryWeights, setCategoryWeights] = useState<
-    Record<string, string>
-  >({});
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [original, setOriginal] = useState<TravelPreference | null>(null);
   const [loading, setLoading] = useState(!!id);
   const [busy, setBusy] = useState(false);
@@ -65,14 +60,6 @@ export default function PreferenceScreen() {
           item.spendingOrder ?? ["Stay", "Food", "Activities", "Transport"],
         );
         setInterests(item.interests ?? []);
-        setCategoryWeights(
-          Object.fromEntries(
-            Object.entries(item.categoryWeights ?? {}).map(([k, v]) => [
-              k,
-              String(v),
-            ]),
-          ),
-        );
       })
       .catch((cause) => {
         if (active) setError(errorMessage(cause));
@@ -100,20 +87,6 @@ export default function PreferenceScreen() {
       setError("Enter a profile name.");
       return;
     }
-    const suppliedWeights = Object.fromEntries(
-      Object.entries(categoryWeights)
-        .filter(([, v]) => v.trim() !== "")
-        .map(([k, v]) => [k, Number(v)]),
-    );
-    if (
-      !remove &&
-      Object.values(suppliedWeights).some(
-        (v) => !Number.isFinite(v) || v < 0 || v > 100,
-      )
-    ) {
-      setError("Category weights must be numbers between 0 and 100.");
-      return;
-    }
     setBusy(true);
     setError("");
     try {
@@ -129,9 +102,6 @@ export default function PreferenceScreen() {
         companion,
         spendingOrder: order,
         interests,
-        categoryWeights: Object.keys(suppliedWeights).length
-          ? suppliedWeights
-          : undefined,
         createdAt: original?.createdAt ?? new Date().toISOString(),
       };
       await updateProfile(user.id, (current) => {
@@ -180,16 +150,16 @@ export default function PreferenceScreen() {
       {!!id && !loading && !original && (
         <Button onPress={() => setRetry((value) => value + 1)}>Retry</Button>
       )}
-      <SectionTitle>Basic Info</SectionTitle>
+
       <Field
-        label="Profile Name *"
+        label="Profile name *"
         value={name}
         onChangeText={setName}
         editable={!disabled}
         placeholder="e.g. Beach Lover"
       />
-      <SectionTitle>Icon</SectionTitle>
-      <Message>Tap to select a category</Message>
+      <SectionTitle>Travel style</SectionTitle>
+      <Message>Choose the style that feels closest to your trip.</Message>
       <View className="flex-row flex-wrap gap-2">
         {categories.map((item) => (
           <Button
@@ -198,116 +168,31 @@ export default function PreferenceScreen() {
             variant={category === item.id ? "primary" : "secondary"}
             accessibilityState={{ selected: category === item.id }}
             onPress={() => setCategory(item.id)}
-          >{`${item.emoji} ${item.name}`}</Button>
-        ))}
-      </View>
-      <SectionTitle>Category weights (0–100%)</SectionTitle>
-      <Message>
-        Higher weights give matching places more influence in your votes. Leave
-        all fields blank to use your selected interests; zero disables a
-        category. We normalize weights so every member has the same maximum vote
-        strength.
-      </Message>
-      <Button
-        variant="secondary"
-        disabled={disabled}
-        onPress={() => {
-          const selected = categories.find((c) => c.id === category);
-          const defaults = memberCategoryWeights([
-            { category, tags: selected?.tags, interests },
-          ]);
-          setCategoryWeights(
-            Object.fromEntries(
-              preferenceCategories.map((c) => [
-                c,
-                String(Math.round((defaults[c] ?? 0) * 100)),
-              ]),
-            ),
-          );
-        }}
-      >
-        Use template weights
-      </Button>
-      {preferenceCategories.map((c) => (
-        <Field
-          key={c}
-          label={c + " (%)"}
-          keyboardType="decimal-pad"
-          value={categoryWeights[c] ?? ""}
-          editable={!disabled}
-          placeholder="Automatic"
-          onChangeText={(value) =>
-            setCategoryWeights((previous) => ({ ...previous, [c]: value }))
-          }
-        />
-      ))}
-      <SectionTitle>Travel Pace</SectionTitle>
-      <View className="flex-row flex-wrap gap-2">
-        {["Relaxed", "Moderate", "Intense"].map((value) => (
-          <Button
-            key={value}
-            disabled={disabled}
-            variant={pace === value ? "primary" : "secondary"}
-            onPress={() => setPace(value)}
           >
-            {value}
+            <View className="flex-row items-center gap-2">
+              <TravelStyleIcon
+                category={item.id}
+                size={16}
+                color={category === item.id ? "#FFFFFF" : "#7E49C2"}
+              />
+              <Text
+                className="font-semibold"
+                style={{
+                  fontFamily: "Inter",
+                  color: category === item.id ? "#FFFFFF" : "#7E49C2",
+                }}
+              >
+                {item.name}
+              </Text>
+            </View>
           </Button>
-        ))}
-      </View>
-      <SectionTitle>Companion Type</SectionTitle>
-      <Message>Who are you travelling with?</Message>
-      <View className="flex-row flex-wrap gap-2">
-        {companions.map((item) => (
-          <Button
-            key={item.id}
-            disabled={disabled}
-            variant={companion === item.id ? "primary" : "secondary"}
-            onPress={() => setCompanion(item.id)}
-          >
-            {item.name}
-          </Button>
-        ))}
-      </View>
-      <SectionTitle>Spending Priority</SectionTitle>
-      <Message>Use the arrows to rank where you want to splurge most</Message>
-      <View>
-        {order.map((item, index) => (
-          <View
-            key={item}
-            className="flex-row items-center border-b border-line py-1 gap-2"
-          >
-            <Text
-              style={{ fontFamily: "Inter" }}
-              className="text-base text-ink flex-1"
-            >
-              {index + 1}. {item}
-            </Text>
-            <Button
-              variant="ghost"
-              accessibilityLabel={`Move ${item} up`}
-              disabled={disabled || index === 0}
-              onPress={() => move(index, -1)}
-            >
-              <ArrowUp color="#7E49C2" size={20} />
-            </Button>
-            <Button
-              variant="ghost"
-              accessibilityLabel={`Move ${item} down`}
-              disabled={disabled || index === order.length - 1}
-              onPress={() => move(index, 1)}
-            >
-              <ArrowDown color="#7E49C2" size={20} />
-            </Button>
-          </View>
         ))}
       </View>
       <SectionTitle>Interests</SectionTitle>
+      <Message>Pick any that you like. You can skip this step.</Message>
       {interestGroups.map((group) => (
         <View key={group.title} className="gap-3">
-          <Text
-            style={{ fontFamily: "Inter" }}
-            className="text-base font-semibold text-ink"
-          >
+          <Text style={{ fontFamily: "Inter" }} className="text-base font-semibold text-ink">
             {group.title}
           </Text>
           <View className="flex-row flex-wrap gap-2">
@@ -330,6 +215,87 @@ export default function PreferenceScreen() {
           </View>
         </View>
       ))}
+      <View className="rounded-2xl border border-line bg-white px-4">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: advancedOpen }}
+          disabled={disabled}
+          onPress={() => setAdvancedOpen((value) => !value)}
+          className="min-h-14 flex-row items-center justify-between"
+        >
+          <View className="flex-1 pr-3">
+            <Text style={{ fontFamily: "Inter" }} className="font-semibold text-ink">
+              More preferences (optional)
+            </Text>
+            <Text style={{ fontFamily: "Inter" }} className="mt-1 text-xs text-muted">
+              Travel pace, group type and spending priorities
+            </Text>
+          </View>
+          <ChevronDown
+            size={19}
+            color="#7E49C2"
+            style={{ transform: [{ rotate: advancedOpen ? "180deg" : "0deg" }] }}
+          />
+        </Pressable>
+        {advancedOpen && (
+          <View className="gap-2 border-t border-line pb-4 pt-3">
+            <SectionTitle>Travel pace</SectionTitle>
+            <View className="flex-row flex-wrap gap-2">
+              {["Relaxed", "Moderate", "Intense"].map((value) => (
+                <Button
+                  key={value}
+                  disabled={disabled}
+                  variant={pace === value ? "primary" : "secondary"}
+                  onPress={() => setPace(value)}
+                >
+                  {value}
+                </Button>
+              ))}
+            </View>
+            <SectionTitle>Who are you travelling with?</SectionTitle>
+            <View className="flex-row flex-wrap gap-2">
+              {companions.map((item) => (
+                <Button
+                  key={item.id}
+                  disabled={disabled}
+                  variant={companion === item.id ? "primary" : "secondary"}
+                  onPress={() => setCompanion(item.id)}
+                >
+                  {item.name}
+                </Button>
+              ))}
+            </View>
+            <SectionTitle>Spending priorities</SectionTitle>
+            <Message>Move your top priority to the top.</Message>
+            {order.map((item, index) => (
+              <View
+                key={item}
+                className="flex-row items-center border-b border-line py-1 gap-2"
+              >
+                <Text style={{ fontFamily: "Inter" }} className="text-base text-ink flex-1">
+                  {index + 1}. {item}
+                </Text>
+                <Button
+                  variant="ghost"
+                  accessibilityLabel={`Move ${item} up`}
+                  disabled={disabled || index === 0}
+                  onPress={() => move(index, -1)}
+                >
+                  <ArrowUp color="#7E49C2" size={20} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  accessibilityLabel={`Move ${item} down`}
+                  disabled={disabled || index === order.length - 1}
+                  onPress={() => move(index, 1)}
+                >
+                  <ArrowDown color="#7E49C2" size={20} />
+                </Button>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
       <Button
         disabled={disabled || !name.trim()}
         busy={busy}

@@ -9,6 +9,12 @@ test("AI function fetches authorized group preferences and ignores caller-suppli
     rpcCalls = 0,
     deny = false;
   let destination = "Seoul";
+  let members: Array<{
+    profiles: Array<{ tags?: string[]; interests?: string[] }>;
+  }> = [
+    { profiles: [{ tags: ["Food"] }] },
+    { profiles: [{ tags: ["Nature"] }] },
+  ];
   runtime.Deno = {
     serve: (fn: typeof handler) => {
       handler = fn;
@@ -39,10 +45,8 @@ test("AI function fetches authorized group preferences and ignores caller-suppli
       if (deny) return new Response("{}", { status: 403 });
       return Response.json({
         destination,
-        members: [
-          { profiles: [{ tags: ["Food"] }] },
-          { profiles: [{ tags: ["Nature"] }] },
-        ],
+        travelPreferences: ["Foodie Adventure: local cuisine and street food"],
+        members,
       });
     }
     prompt = JSON.parse(String(init?.body)).contents[0].parts[0].text;
@@ -86,12 +90,26 @@ test("AI function fetches authorized group preferences and ignores caller-suppli
     });
     assert(
       prompt.includes("Seoul") &&
+        prompt.includes("Foodie Adventure") &&
         prompt.includes("Food") &&
         prompt.includes("Nature"),
     );
     assert(
       !prompt.includes("Spoofed city") && !prompt.includes("Ignore others"),
     );
+    // The RPC is fetched for every generation, so a newly accepted member's
+    // current Profile preferences are included on the next request.
+    members = [
+      ...members,
+      { profiles: [{ interests: ["Night markets"] }] },
+    ];
+    const afterInvite = await handler!(request());
+    assert.equal(afterInvite.status, 200);
+    assert.deepEqual((await afterInvite.json()).preferenceCoverage, {
+      membersTotal: 3,
+      membersWithPreferences: 3,
+    });
+    assert(prompt.includes("Night markets"));
     for (const city of ["Paris", "Ushuaia, Argentina"]) {
       destination = city;
       const starter = await handler!(request());
@@ -103,7 +121,7 @@ test("AI function fetches authorized group preferences and ignores caller-suppli
     prompt = "";
     assert.equal((await handler!(request())).status, 403);
     assert.equal(prompt, "");
-    assert.equal(rpcCalls, 4);
+    assert.equal(rpcCalls, 5);
   } finally {
     globalThis.fetch = oldFetch;
     if (oldDeno === undefined) delete runtime.Deno;

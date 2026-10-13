@@ -1,3 +1,5 @@
+import DragReorderRow, { ReorderHandle } from "@/components/DragReorderRow";
+import OnlinePlaceImage from "@/components/OnlinePlaceImage";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -998,29 +1000,7 @@ export default function CandidatePool({
           return (
             <View key={c.id} style={s.candidate}>
               <View style={{ height: 74 }}>
-                {c.image ? (
-                  <Image
-                    source={{ uri: c.image }}
-                    style={{ width: "100%", height: "100%" }}
-                  />
-                ) : c.cover === "generic" ? (
-                  <View
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      backgroundColor: "#F1E8FC",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <MapPin size={25} color={purple} />
-                  </View>
-                ) : (
-                  <Image
-                    source={c.cover === "japan" ? japan : bali}
-                    style={{ width: "100%", height: "100%" }}
-                  />
-                )}
+                <OnlinePlaceImage title={c.name} source={c.image ? { uri: c.image } : undefined} style={{ width: "100%", height: "100%" }} />
                 {(c.confirmed || c.ai) && (
                   <Text
                     style={[
@@ -1581,38 +1561,10 @@ function DraftRow({
   last: boolean;
 }) {
   const [controls, setControls] = useState(false);
-  const dragY = useRef<number | null>(null);
   return (
-    <View>
+    <DragReorderRow label={stop.title} index={index} max={maxIndex} onMove={onMove} onTap={() => setControls(!controls)}>
       <View style={[s.row, { minHeight: 78, gap: 8 }]}>
-        <View
-          onStartShouldSetResponder={() => true}
-          onResponderGrant={(e) => {
-            dragY.current = e.nativeEvent.pageY;
-          }}
-          onResponderRelease={(e) => {
-            const delta =
-              e.nativeEvent.pageY - (dragY.current ?? e.nativeEvent.pageY);
-            if (Math.abs(delta) > 25) {
-              const distance = Math.max(1, Math.round(Math.abs(delta) / 82));
-              onMove(
-                Math.max(
-                  0,
-                  Math.min(
-                    maxIndex,
-                    index + (delta > 0 ? distance : -distance),
-                  ),
-                ),
-              );
-            } else setControls(!controls);
-            dragY.current = null;
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`Reorder ${stop.title}`}
-          style={{ paddingVertical: 18, paddingRight: 4 }}
-        >
-          <GripVertical size={14} color="#CFCCD8" />
-        </View>
+        <ReorderHandle />
         <Text
           style={{
             fontSize: 11,
@@ -1718,9 +1670,10 @@ function DraftRow({
           </Pressable>
         </View>
       )}
-    </View>
+    </DragReorderRow>
   );
 }
+
 function AddCandidate({
   destination,
   onClose,

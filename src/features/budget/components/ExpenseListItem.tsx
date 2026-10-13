@@ -16,7 +16,7 @@ export function ExpenseListItem({ expense, paidByName, myShare }: Props) {
   const decimals = findCurrency(code)?.decimals ?? 2;
 
   return (
-    <Card className="flex-row items-center justify-between">
+    <Card className="flex-row items-center justify-between rounded-2xl border-[#EEE7F5]">
       <View className="flex-1 pr-3">
         <Text className="text-base font-semibold text-ink">{expense.title}</Text>
         <Text className="text-xs text-muted">

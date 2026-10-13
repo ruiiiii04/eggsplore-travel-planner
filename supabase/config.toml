@@ -442,3 +442,10 @@ verify_jwt = false
 
 [functions.estimate-costs]
 verify_jwt = true
+
+[functions.check-flight-status]
+verify_jwt = true
+
+# Scheduler authenticates with FLIGHT_MONITOR_CRON_SECRET inside the handler.
+[functions.monitor-trip-flights]
+verify_jwt = false

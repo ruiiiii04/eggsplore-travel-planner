@@ -276,7 +276,7 @@ export default function PlaceDetailsSheet({
                 )}
               </>
               <Text style={s.addText}>
-                {place.tripId ? "View itinerary" : "Add to Itinerary"}
+                {place.tripId ? "Itinerary" : "Add to itinerary"}
               </Text>
             </TouchableOpacity>
           </View>
