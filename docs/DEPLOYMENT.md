@@ -9,7 +9,8 @@ TestFlight for iOS.
 ## Current readiness
 
 - `eas.json` already has a `preview` profile that produces an installable APK.
-- `app.json` does not yet declare `expo.android.package` or an EAS `projectId`.
+- `app.json` now declares the stable Android application ID
+  `com.purplefeelings.eggsplore`; an EAS `projectId` still needs to be linked.
 - The project needs an Expo account/project before cloud builds can run.
 - The repository README still has an Android download placeholder; replace it
   after attaching the APK to a GitHub Release.
@@ -40,11 +41,12 @@ npx eas-cli@latest login
 npx eas-cli@latest build:configure
 ```
 
-During setup, select the correct Expo owner and choose a permanent, globally
-unique Android application ID (reverse-domain form, such as
-`com.<team>.eggsplore`). Once confirmed, commit the generated `android.package`
-and EAS `projectId` in app configuration. Do not change this package ID after
-publishing installs, because Android treats a different ID as a separate app.
+During setup, select the correct Expo owner and confirm the Android application
+ID `com.purplefeelings.eggsplore` is available. If it is already owned by
+another app, choose a team-controlled reverse-domain ID before the first build.
+Commit the generated EAS `projectId` in app configuration. Do not change the
+Android package ID after publishing installs, because Android treats a
+different ID as a separate app.
 
 ### 3. Add the public app environment values
 

@@ -7,6 +7,9 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": ["expo-router", "expo-status-bar", ["expo-notifications", { "defaultChannel": "trip-reminders" }]],
+    "android": {
+      "package": "com.purplefeelings.eggsplore"
+    },
     "ios": {
       "supportsTablet": true
     },
