@@ -8,7 +8,7 @@
 
 ## Try Eggsplore
 
-- **Android download:** Add the public APK/download link before submission.
+- **Android APK (v1.0.0):** [Download Eggsplore for Android](https://expo.dev/artifacts/eas/h57DGOCGbr0zDvuLAypJ3IQdI-s3Q34D37Ligd59shQ.apk). This EAS preview link expires on **27 October 2026**; publish the APK as a public GitHub Release asset before then for a durable judging link.
 - **Create an account:** On the login screen, tap **New to Eggsplore? Create account**. Enter a valid email and a password of at least 8 characters (confirm it when prompted), then tap **Create Account**. If email confirmation is enabled, confirm through your inbox, return to Eggsplore, and log in manually.
 - Eggsplore requires an internet connection and a working app backend. A prepared trip is recommended for the fastest judging walkthrough.
 
