@@ -1,3 +1,5 @@
+import DragReorderRow, { ReorderHandle, useReorderScrollEnabled } from "@/components/DragReorderRow";
+import OnlinePlaceImage from "@/components/OnlinePlaceImage";
 import LocationField from "./location/LocationField";
 import { parseLocation, parseLocationParam, savedLocationColumns, type ActivityLocation } from "./location/model";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +37,7 @@ const formLabel = { color: ink, fontSize: 12, fontWeight: "700" as const, margin
 const formInput = { minHeight: 46, borderRadius: 13, borderWidth: 1, borderColor: line, backgroundColor: "white", paddingHorizontal: 13, color: ink, fontSize: 14 };
 
 export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
+  const reorderScrollEnabled = useReorderScrollEnabled();
   const { id = "", from = "", action = "", activityId = "", locationDraft = "", activityName = "" } = useLocalSearchParams<{ id: string; from?: string; action?: string; activityId?: string; locationDraft?: string; activityName?: string }>();
   const { user } = useAuth();
   const [activeMode, setActiveMode] = useState<ScreenMode>(mode);
@@ -496,7 +499,7 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
   };
 
   return <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1, width: "100%", backgroundColor: "#FBF9FD" }}>
-    <ScrollView ref={scrollRef} contentContainerStyle={{ width: "100%", maxWidth: 402, alignSelf: "center", paddingBottom: 18 }} showsVerticalScrollIndicator={false}>
+    <ScrollView scrollEnabled={reorderScrollEnabled} ref={scrollRef} contentContainerStyle={{ width: "100%", maxWidth: 402, alignSelf: "center", paddingBottom: 18 }} showsVerticalScrollIndicator={false}>
       <WorkspaceHeader role={trip?.owner_id === user?.id ? "Group Leader" : "Member"} title={title} destination={destination} dateRange={dateRange} id={id} trips={allTrips} active={activeMode === "candidates" ? "candidates" : activeMode === "budget" ? "budget" : "itinerary"} go={go} onMore={openTripOptions} onBack={() => from === "home" ? router.replace("/(tabs)/home") : router.canGoBack() ? router.back() : router.replace("/(tabs)/home")} />
       {activeMode !== "itinerary" && !!user && <FlightDisruptionCard showAlert={false} showSetup={flightDetailsOpen} onCloseSetup={() => setFlightDetailsOpen(false)} tripId={id} userId={user.id} startDate={trip?.start_date} destination={destination} isLeader={trip?.owner_id === user.id} activities={items} onItineraryChanged={() => void refreshItineraryItems()} />}
       {activeMode === "trip" && <TripOverview destination={destination} dateRange={dateRange} itemsCount={items.length} openItinerary={() => go("itinerary")} openCandidates={() => go("candidates")} />}
@@ -610,7 +613,7 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
 
 function WorkspaceHeader({ role, title, destination, dateRange, id, trips, active, go, onMore, onBack }: { role: "Group Leader" | "Member"; title: string; destination: string; dateRange: string; id: string; trips: Trip[]; active: "itinerary" | "candidates" | "budget"; go: (mode: ScreenMode) => void; onMore: () => void; onBack: () => void }) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const cover = /japan|tokyo|kyoto|osaka|hokkaido/i.test(`${destination} ${title}`) ? require("../../../assets/trip-japan-cover.png") : require("../../../assets/trip-bali-cover.png");
+  const cover = /japan|tokyo|kyoto|osaka|hokkaido/i.test(`${destination} ${title}`) ? require("../../../assets/trip-japan-cover.png") : /bali|indonesia/i.test(destination) ? require("../../../assets/trip-bali-cover.png") : undefined;
   const selectTrip = (tripId: string) => {
     void rememberTrip(tripId);
     setPickerOpen(false);
@@ -618,7 +621,7 @@ function WorkspaceHeader({ role, title, destination, dateRange, id, trips, activ
   };
   return <View style={{ paddingHorizontal: 20, paddingTop: 4 }}>
     <View style={{ height: 54, flexDirection: "row", alignItems: "center" }}><Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><ArrowLeft size={23} color={ink} /></Pressable><Text style={{ marginLeft: 8, fontFamily: "Fredoka", fontSize: 21, color: "#3B1454", fontWeight: "700" }}>EGGSPLORE</Text><View style={{ flex: 1 }} /><View style={{ flexDirection: "row", gap: 8 }}><NotificationBell /><Pressable accessibilityRole="button" accessibilityLabel="Trip options" onPress={onMore} style={iconButton}><MoreHorizontal size={24} color={purple} /></Pressable></View></View>
-    <Pressable accessibilityRole="button" accessibilityLabel="Switch trip" onPress={() => setPickerOpen((v) => !v)} style={{ flexDirection: "row", alignItems: "center", backgroundColor: pale, borderRadius: 22, borderWidth: 1, borderColor: line, padding: 10, gap: 11, marginTop: 4 }}><Image source={cover} style={{ width: 66, height: 62, borderRadius: 14 }} /><View style={{ flex: 1, gap: 4 }}><View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}><Text numberOfLines={1} style={{ color: ink, fontFamily: "Fredoka", fontSize: 17, fontWeight: "700", flexShrink: 1 }}>{title}</Text><Text style={{ color: purple, backgroundColor: "#E9DFFA", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 12, fontSize: 9 }}>Planning</Text></View><View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}><UsersRound size={13} color={muted} /><Text style={{ color: muted, fontSize: 10 }}>Travel group</Text><Text style={{ color: purple, backgroundColor: "#E9DFFA", borderRadius: 10, paddingHorizontal: 6, paddingVertical: 3, fontSize: 9, fontWeight: "700" }}>{role}</Text></View><View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}><CalendarDays size={13} color={muted} /><Text numberOfLines={1} style={{ color: muted, fontSize: 10, flexShrink: 1 }}>{dateRange}</Text><MapPin size={13} color={muted} /><Text numberOfLines={1} style={{ color: muted, fontSize: 10, flex: 1 }}>{destination}</Text></View></View><ChevronDown size={19} color={purple} style={{ transform: [{ rotate: pickerOpen ? "180deg" : "0deg" }] }} /></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel="Switch trip" onPress={() => setPickerOpen((v) => !v)} style={{ flexDirection: "row", alignItems: "center", backgroundColor: pale, borderRadius: 22, borderWidth: 1, borderColor: line, padding: 10, gap: 11, marginTop: 4 }}><OnlinePlaceImage title={destination} fallback={cover} style={{ width: 66, height: 62, borderRadius: 14 }} /><View style={{ flex: 1, gap: 4 }}><View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}><Text numberOfLines={1} style={{ color: ink, fontFamily: "Fredoka", fontSize: 17, fontWeight: "700", flexShrink: 1 }}>{title}</Text><Text style={{ color: purple, backgroundColor: "#E9DFFA", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 12, fontSize: 9 }}>Planning</Text></View><View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}><UsersRound size={13} color={muted} /><Text style={{ color: muted, fontSize: 10 }}>Travel group</Text><Text style={{ color: purple, backgroundColor: "#E9DFFA", borderRadius: 10, paddingHorizontal: 6, paddingVertical: 3, fontSize: 9, fontWeight: "700" }}>{role}</Text></View><View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}><CalendarDays size={13} color={muted} /><Text numberOfLines={1} style={{ color: muted, fontSize: 10, flexShrink: 1 }}>{dateRange}</Text><MapPin size={13} color={muted} /><Text numberOfLines={1} style={{ color: muted, fontSize: 10, flex: 1 }}>{destination}</Text></View></View><ChevronDown size={19} color={purple} style={{ transform: [{ rotate: pickerOpen ? "180deg" : "0deg" }] }} /></Pressable>
     {pickerOpen && <View style={{ backgroundColor: "white", borderWidth: 1, borderColor: line, borderRadius: 16, padding: 5, marginTop: 6 }}>{trips.filter((trip) => trip.id !== id).map((trip) => <Pressable key={trip.id} onPress={() => selectTrip(trip.id)} style={{ padding: 11, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 8 }}><View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: pale, alignItems: "center", justifyContent: "center" }}><MapPin size={16} color={purple} /></View><View style={{ flex: 1 }}><Text numberOfLines={1} style={{ color: ink, fontWeight: "700", fontSize: 12 }}>{trip.title}</Text><Text numberOfLines={1} style={{ color: muted, fontSize: 10, marginTop: 2 }}>{trip.destination || "Destination to be decided"}</Text></View><ChevronRight size={16} color={muted} /></Pressable>)}{!trips.length && <Text style={{ color: muted, padding: 12, fontSize: 11 }}>Loading your trips...</Text>}</View>}
     <MainTabs active={active} go={go} />
   </View>;
@@ -687,6 +690,7 @@ function ItineraryContent({ items, destination, startDate, endDate, flexibleDayC
   if (!Object.keys(days).length) days.flexible = [];
   const orderedDays = Object.entries(days).sort(([left], [right]) => left === "flexible" ? 1 : right === "flexible" ? -1 : getOrdinalDayNumber(left) !== null && getOrdinalDayNumber(right) !== null ? getOrdinalDayNumber(left)! - getOrdinalDayNumber(right)! : getOrdinalDayNumber(left) !== null ? -1 : getOrdinalDayNumber(right) !== null ? 1 : left.localeCompare(right));
   return <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
+    {canEdit && <Text style={{ color: muted, fontSize: 12, marginBottom: 10 }}>Hold the purple handle until the card lifts, drag up or down, then release to reorder.</Text>}
     {!canEdit && <Text style={{ color: muted, fontSize: 12, marginBottom: 10 }}>Only the trip organiser can edit this itinerary.</Text>}
     {orderedDays.map(([date, dayItems], dayIndex) => {
       const ordinalDay = getOrdinalDayNumber(date);
@@ -718,27 +722,26 @@ function ItineraryContent({ items, destination, startDate, endDate, flexibleDayC
   </View>;
 }
 function ActivityRow({ item, index, moveStart, moveEnd, first, last, controls, onToggleControls, onMove, onEdit, onDelete, canEdit }: { item: ItineraryItem; index: number; moveStart: number; moveEnd: number; first: boolean; last: boolean; controls: boolean; onToggleControls: () => void; onMove: (targetIndex: number) => void; onEdit: () => void; onDelete: () => void; canEdit: boolean }) {
-  const dragY = useRef<number | null>(null);
   const legacyCategory = item.description?.startsWith("category:") ? item.description.slice(9) : "";
   const category = item.activity_category || legacyCategory;
   const Icon = activityCategories.find(([key]) => key === category)?.[2] ?? (index % 3 === 0 ? Plane : index % 3 === 1 ? TrainFront : Utensils);
   const detail = legacyCategory || parseLegacyDayDescription(item.description) ? "" : item.description;
   const displayTime = item.start_time?.slice(11, 16) ?? parseLegacyDayDescription(item.description)?.time ?? "--:--";
-  return <View style={{ borderBottomWidth: 1, borderBottomColor: line }}>
+  return <DragReorderRow label={item.title} index={index} min={moveStart} max={moveEnd} disabled={!canEdit} onMove={onMove} onTap={onToggleControls} style={{ borderBottomWidth: 1, borderBottomColor: line }}>
   <View style={{ flexDirection: "row", alignItems: "center", minHeight: 72, gap: 8 }}>
-    {canEdit && <View onStartShouldSetResponder={() => true} onResponderGrant={(event) => { dragY.current = event.nativeEvent.pageY; }} onResponderRelease={(event) => { const delta = event.nativeEvent.pageY - (dragY.current ?? event.nativeEvent.pageY); if (Math.abs(delta) > 24) { const steps = Math.max(1, Math.round(Math.abs(delta) / 78)); const target = Math.max(moveStart, Math.min(moveEnd, index + (delta > 0 ? steps : -steps))); if (target !== index) onMove(target); } else onToggleControls(); dragY.current = null; }} accessibilityRole="button" accessibilityLabel={`Reorder ${item.title}. Drag to another position or tap for move controls.`} style={{ width: 20, alignItems: "center", justifyContent: "center", paddingVertical: 15 }}><GripVertical size={15} color={controls ? purple : "#CFCCD8"} /></View>}
+    {canEdit && <ReorderHandle />}
     <View style={{ width: 8, alignItems: "center" }}><View style={{ width: 8, height: 8, borderRadius: 5, backgroundColor: purple }} /></View>
     <Text style={{ width: 44, color: muted, fontSize: 12 }}>{displayTime}</Text>
     <View style={{ width: 42, height: 42, borderRadius: 24, backgroundColor: pale, alignItems: "center", justifyContent: "center" }}><Icon size={19} color={purple} /></View>
-    <Pressable onPress={canEdit ? onEdit : undefined} style={{ flex: 1, paddingVertical: 9 }}><Text numberOfLines={1} style={{ color: ink, fontWeight: "700", fontSize: 13 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: muted, fontSize: 11, marginTop: 4 }}>{[item.location_name, detail].filter(Boolean).join(" - ") || "Activity"}</Text></Pressable>
-    {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${item.title}`} onPress={onEdit} style={{ padding: 7 }}><Pencil size={15} color={purple} /></Pressable>}
-    {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${item.title}`} onPress={onDelete} style={{ padding: 7 }}><Trash2 size={15} color={muted} /></Pressable>}
+    <View style={{ flex: 1, paddingVertical: 9 }}><Text numberOfLines={1} style={{ color: ink, fontWeight: "700", fontSize: 13 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: muted, fontSize: 11, marginTop: 4 }}>{[item.location_name, detail].filter(Boolean).join(" - ") || "Activity"}</Text></View>
+
+    {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${item.title}`} onPress={onDelete} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Trash2 size={15} color={muted} /></Pressable>}
   </View>
   {canEdit && controls && <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, paddingBottom: 8 }}>
     <Pressable accessibilityRole="button" accessibilityLabel={`Move ${item.title} up`} disabled={first} onPress={() => onMove(index - 1)} style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 24, borderWidth: 1, borderColor: line, backgroundColor: pale, paddingHorizontal: 10, paddingVertical: 10, opacity: first ? 0.4 : 1 }}><ArrowUp size={14} color={purple} /><Text style={{ color: purple }}>Move up</Text></Pressable>
     <Pressable accessibilityRole="button" accessibilityLabel={`Move ${item.title} down`} disabled={last} onPress={() => onMove(index + 1)} style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 24, borderWidth: 1, borderColor: line, backgroundColor: pale, paddingHorizontal: 10, paddingVertical: 10, opacity: last ? 0.4 : 1 }}><ArrowDown size={14} color={purple} /><Text style={{ color: purple }}>Move down</Text></Pressable>
   </View>}
-  </View>;
+  </DragReorderRow>;
 }
 
 function NotesContent({ items, value, onChange, onToggleNote, destination, tripDays, addNote, editNote, deleteNote, loading, syncError, reminderNotice }: { items: NoteItem[]; value: string; onChange: (value: string) => void; onToggleNote: (note: NoteItem) => void; destination: string; tripDays: string[]; addNote: () => void; editNote: (note: NoteItem) => void; deleteNote: (note: NoteItem) => void; loading: boolean; syncError: string; reminderNotice: string }) {

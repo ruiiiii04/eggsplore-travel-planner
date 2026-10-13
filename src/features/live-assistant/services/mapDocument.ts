@@ -18,7 +18,7 @@ export function mapUpdateScript(props: TripMapProps) {
 }
 
 export const mapDocument = `<!doctype html>
-<html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<html><head><meta name="referrer" content="strict-origin-when-cross-origin"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 html,body,#map { width:100%; height:100%; margin:0; background:#F2EAFB; }
@@ -36,9 +36,11 @@ html,body,#map { width:100%; height:100%; margin:0; background:#F2EAFB; }
   var map = L.map("map", { zoomControl:false, attributionControl:false }).setView([15,105],4);
   L.control.attribution({ position:"bottomleft", prefix:false }).addTo(map);
   var tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-  }).addTo(map);
+    maxZoom:19, referrerPolicy:"strict-origin-when-cross-origin", updateWhenIdle:true, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+  });
+  var tilesAdded = false;
   tiles.on("tileload", function () { send("tiles"); });
+  tiles.on("tileerror", function () { send("error"); });
   var markers = L.layerGroup().addTo(map);
   var route = L.layerGroup().addTo(map);
   var picking = false;
@@ -79,6 +81,7 @@ html,body,#map { width:100%; height:100%; margin:0; background:#F2EAFB; }
       geometry = nextGeometry;
       reset = data.resetSignal;
     }
+    if (!tilesAdded) { tiles.addTo(map); tilesAdded = true; }
   };
   window.addEventListener("resize", function () { map.invalidateSize(); });
   send("ready");

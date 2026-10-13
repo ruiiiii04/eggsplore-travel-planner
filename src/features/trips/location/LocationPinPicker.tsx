@@ -34,5 +34,7 @@ export default function LocationPinPicker(props: TripMapProps) {
   }, [update]);
   const document = html.replace('  send("ready");',
     '  window.addEventListener("message", function(event) { if (event.source === window.parent && event.data.type === "update") window.updateMap(event.data.props); });\n  send("ready");');
-  return createElement("iframe", { ref: frame, srcDoc: document, title: props.onSelectCoordinate ? "Choose activity location" : "Trip map", sandbox: "allow-scripts", style: { border: 0, width: "100%", height: "100%" } });
+  // srcDoc is our fixed map template; labels are inserted with textContent.
+  // Keep its real app origin so tile requests can identify the referring site.
+  return createElement("iframe", { ref: frame, srcDoc: document, title: props.onSelectCoordinate ? "Choose activity location" : "Trip map", sandbox: "allow-scripts allow-same-origin", referrerPolicy: "strict-origin-when-cross-origin", style: { border: 0, width: "100%", height: "100%" } });
 }

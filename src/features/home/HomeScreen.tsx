@@ -1,3 +1,4 @@
+import OnlinePlaceImage from "@/components/OnlinePlaceImage";
 import { useState } from "react";
 import {
   Image,
@@ -86,16 +87,7 @@ function DestinationCard({
       style={[styles.tripCard, spacingAfter && styles.tripCardSpacing]}
     >
       <View style={[styles.tripPhoto, !cover && styles.tripPhotoFallback]}>
-        {cover ? (
-          <Image source={cover} resizeMode="cover" style={styles.tripCover} />
-        ) : (
-          <MapPin
-            size={88}
-            color="#B891DF"
-            strokeWidth={1.2}
-            style={styles.fallbackMapPin}
-          />
-        )}
+        <OnlinePlaceImage title={trip.destination ?? ""} source={trip.cover_url ? { uri: trip.cover_url } : undefined} fallback={cover} style={styles.tripCover} />
         <View
           style={[styles.photoShade, !cover && styles.fallbackPhotoShade]}
         />
