@@ -106,26 +106,20 @@ export type NewExpense = {
   splits: SplitRow[];
 };
 
-// Two inserts, not one transaction: if the splits fail, the expense is
-// deleted again so no expense is left without its splits.
+// Save the expense and all shares through one transactional database function.
 export async function addExpense(input: NewExpense): Promise<void> {
   const db = getSupabase();
-  const { splits, ...expense } = input;
-  const { data, error } = await db
-    .from("expenses")
-    .insert(expense)
-    .select("id")
-    .single();
+  const { error } = await db.rpc("add_trip_expense", {
+    target_trip: input.trip_id,
+    expense_title: input.title,
+    expense_amount: input.amount,
+    expense_category: input.category,
+    target_paid_by: input.paid_by,
+    target_original_amount: input.original_amount,
+    target_original_currency: input.original_currency,
+    split_rows: input.splits,
+  });
   if (error) throw error;
-  if (splits.length > 0) {
-    const { error: splitError } = await db
-      .from("expense_splits")
-      .insert(splits.map((s) => ({ ...s, expense_id: data.id })));
-    if (splitError) {
-      await db.from("expenses").delete().eq("id", data.id);
-      throw splitError;
-    }
-  }
 }
 
 export async function setSplitSettled(

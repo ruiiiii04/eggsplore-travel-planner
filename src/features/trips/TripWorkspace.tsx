@@ -735,15 +735,14 @@ function ActivityRow({ item, index, moveStart, moveEnd, first, last, controls, o
   const detail = legacyCategory || parseLegacyDayDescription(item.description) ? "" : item.description;
   const displayTime = item.start_time?.slice(11, 16) ?? parseLegacyDayDescription(item.description)?.time ?? "--:--";
   return <DragReorderRow label={item.title} index={index} min={moveStart} max={moveEnd} disabled={!canEdit} onMove={onMove} onTap={onToggleControls} style={{ borderBottomWidth: 1, borderBottomColor: line }}>
-  <View style={{ flexDirection: "row", alignItems: "center", minHeight: 72, gap: 8 }}>
+  <View style={{ flexDirection: "row", alignItems: "center", minHeight: 56, gap: 6 }}>
     {canEdit && <ReorderHandle />}
-    <View style={{ width: 8, alignItems: "center" }}><View style={{ width: 8, height: 8, borderRadius: 5, backgroundColor: purple }} /></View>
-    <Text style={{ width: 44, color: muted, fontSize: 12 }}>{displayTime}</Text>
-    <View style={{ width: 42, height: 42, borderRadius: 24, backgroundColor: pale, alignItems: "center", justifyContent: "center" }}><Icon size={19} color={purple} /></View>
-    <View style={{ flex: 1, paddingVertical: 9 }}><Text numberOfLines={1} style={{ color: ink, fontWeight: "700", fontSize: 13 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: muted, fontSize: 11, marginTop: 4 }}>{[item.location_name, detail].filter(Boolean).join(" - ") || "Activity"}</Text></View>
+    <Text style={{ width: 40, color: muted, fontSize: 11 }}>{displayTime}</Text>
+    <View style={{ width: 34, height: 34, borderRadius: 18, backgroundColor: pale, alignItems: "center", justifyContent: "center" }}><Icon size={17} color={purple} /></View>
+    <View style={{ flex: 1, minWidth: 0, paddingVertical: 6 }}><Text numberOfLines={1} style={{ color: ink, fontWeight: "700", fontSize: 13 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: muted, fontSize: 11, marginTop: 2 }}>{[item.location_name, detail].filter(Boolean).join(" - ") || "Activity"}</Text></View>
 
-    {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${item.title}`} onPress={onEdit} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Pencil size={15} color={purple} /></Pressable>}
-    {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${item.title}`} onPress={onDelete} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Trash2 size={15} color={muted} /></Pressable>}
+    {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${item.title}`} onPress={onEdit} style={{ minWidth: 38, minHeight: 40, alignItems: "center", justifyContent: "center" }}><Pencil size={15} color={purple} /></Pressable>}
+    {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${item.title}`} onPress={onDelete} style={{ minWidth: 38, minHeight: 40, alignItems: "center", justifyContent: "center" }}><Trash2 size={15} color={muted} /></Pressable>}
   </View>
   {canEdit && controls && <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, paddingBottom: 8 }}>
     <Pressable accessibilityRole="button" accessibilityLabel={`Move ${item.title} up`} disabled={first} onPress={() => onMove(index - 1)} style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 24, borderWidth: 1, borderColor: line, backgroundColor: pale, paddingHorizontal: 10, paddingVertical: 10, opacity: first ? 0.4 : 1 }}><ArrowUp size={14} color={purple} /><Text style={{ color: purple }}>Move up</Text></Pressable>

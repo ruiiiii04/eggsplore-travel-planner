@@ -76,6 +76,44 @@ Deno.serve(async (request) => {
     return respond({ error: "Enter a destination under 80 characters." }, 400);
   }
 
+  // This endpoint calls a paid model. Keep its quota separate from Ask AI so
+  // forecast requests cannot exhaust a user's chat allowance.
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = request.headers.get("apikey") ?? Deno.env.get("SUPABASE_ANON_KEY");
+  const authorization = request.headers.get("authorization");
+  if (!supabaseUrl || !anonKey || !authorization) {
+    return respond({ error: "Cost estimate limits are not configured." }, 503);
+  }
+  let quotaAllowed: unknown;
+  try {
+    const quota = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_cost_estimate_request`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    if (!quota.ok) {
+      return respond({ error: "Cost estimate limits are unavailable. Please try again." }, 503);
+    }
+    quotaAllowed = await quota.json();
+  } catch (error) {
+    console.error(
+      "[estimate-costs] Quota check failed:",
+      error instanceof Error ? error.message : String(error),
+    );
+    return respond({ error: "Cost estimate limits are unavailable. Please try again." }, 503);
+  }
+
+  if (typeof quotaAllowed !== "boolean") {
+    return respond({ error: "Cost estimate limits are unavailable. Please try again." }, 503);
+  }
+  if (!quotaAllowed) {
+    return respond({ error: "You've reached the cost estimate limit (5 requests per minute or 30 per day). Please try again later." }, 429);
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
