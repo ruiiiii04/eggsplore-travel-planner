@@ -742,6 +742,7 @@ function ActivityRow({ item, index, moveStart, moveEnd, first, last, controls, o
     <View style={{ width: 42, height: 42, borderRadius: 24, backgroundColor: pale, alignItems: "center", justifyContent: "center" }}><Icon size={19} color={purple} /></View>
     <View style={{ flex: 1, paddingVertical: 9 }}><Text numberOfLines={1} style={{ color: ink, fontWeight: "700", fontSize: 13 }}>{item.title}</Text><Text numberOfLines={1} style={{ color: muted, fontSize: 11, marginTop: 4 }}>{[item.location_name, detail].filter(Boolean).join(" - ") || "Activity"}</Text></View>
 
+    {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${item.title}`} onPress={onEdit} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Pencil size={15} color={purple} /></Pressable>}
     {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${item.title}`} onPress={onDelete} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Trash2 size={15} color={muted} /></Pressable>}
   </View>
   {canEdit && controls && <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, paddingBottom: 8 }}>
