@@ -505,12 +505,13 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
   return <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1, width: "100%", backgroundColor: "#FBF9FD" }}>
     <ScrollView scrollEnabled={reorderScrollEnabled} ref={scrollRef} contentContainerStyle={{ width: "100%", maxWidth: 402, alignSelf: "center", paddingBottom: 18 }} showsVerticalScrollIndicator={false}>
       <WorkspaceHeader role={trip?.owner_id === user?.id ? "Group Leader" : "Member"} title={title} destination={destination} dateRange={dateRange} id={id} trips={allTrips} active={activeMode === "candidates" ? "candidates" : activeMode === "budget" ? "budget" : "itinerary"} go={go} onMore={openTripOptions} onBack={() => from === "home" ? router.replace("/(tabs)/home") : router.canGoBack() ? router.back() : router.replace("/(tabs)/home")} />
-      {activeMode !== "itinerary" && !!user && <FlightDisruptionCard showAlert={false} showSetup={flightDetailsOpen} onCloseSetup={() => setFlightDetailsOpen(false)} tripId={id} userId={user.id} startDate={trip?.start_date} destination={destination} isLeader={trip?.owner_id === user.id} activities={items} onItineraryChanged={() => void refreshItineraryItems()} />}
+      {!!user && <View style={activeMode === "itinerary" ? { paddingHorizontal: 20, paddingTop: 16 } : undefined}>
+        <FlightDisruptionCard showAlert={activeMode === "itinerary"} showSetup={flightDetailsOpen} onCloseSetup={() => setFlightDetailsOpen(false)} fallback={<WorkspacePlanningCard mode="itinerary" itemsCount={items.length} />} tripId={id} userId={user.id} startDate={trip?.start_date} destination={destination} isLeader={trip?.owner_id === user.id} activities={items} onItineraryChanged={() => void refreshItineraryItems()} />
+      </View>}
       {activeMode === "trip" && <TripOverview destination={destination} dateRange={dateRange} itemsCount={items.length} openItinerary={() => go("itinerary")} openCandidates={() => go("candidates")} />}
       {(activeMode === "itinerary" || activeMode === "notes") && <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
-        {activeMode === "itinerary" && !!user
-          ? <FlightDisruptionCard showAlert showSetup={flightDetailsOpen} onCloseSetup={() => setFlightDetailsOpen(false)} fallback={<WorkspacePlanningCard mode="itinerary" itemsCount={items.length} />} tripId={id} userId={user.id} startDate={trip?.start_date} destination={destination} isLeader={trip?.owner_id === user.id} activities={items} onItineraryChanged={() => void refreshItineraryItems()} />
-          : <WorkspacePlanningCard mode={activeMode} itemsCount={items.length} canEdit={activeMode === "notes"} edit={() => openAdd("note")} />}
+        {activeMode === "itinerary" && !user && <WorkspacePlanningCard mode="itinerary" itemsCount={items.length} />}
+        {activeMode === "notes" && <WorkspacePlanningCard mode="notes" itemsCount={items.length} canEdit edit={() => openAdd("note")} />}
         <WorkspaceContentTabs active={activeMode} go={go} />
       </View>}
       {activeMode === "itinerary" && <>
