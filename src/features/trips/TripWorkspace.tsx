@@ -413,6 +413,10 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
     setTripOptionsOpen(false);
     setTimeout(() => setFlightDetailsOpen(true), 280);
   };
+  const deleteTripFromOptions = () => {
+    setTripOptionsOpen(false);
+    setTimeout(() => requestTripAction({ kind: "delete-trip" }), 280);
+  };
   const handledMapAction = useRef("");
   useEffect(() => {
     if (!["add-activity", "find-location"].includes(action)) { handledMapAction.current = ""; return; }
@@ -529,6 +533,9 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
       <Text style={{ color: muted, fontSize: 12, lineHeight: 18 }}>Manage the group or add flight details for disruption alerts.</Text>
       <Pressable accessibilityRole="button" onPress={openMembersFromOptions} style={{ minHeight: 56, borderRadius: 14, backgroundColor: "white", borderWidth: 1, borderColor: line, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11 }}><UsersRound size={18} color={purple} /><View style={{ flex: 1 }}><Text style={{ color: ink, fontWeight: "700", fontSize: 13 }}>Trip members</Text><Text style={{ color: muted, fontSize: 10, marginTop: 2 }}>Invite or manage members</Text></View><ChevronRight size={17} color={muted} /></Pressable>
       <Pressable accessibilityRole="button" onPress={openFlightFromOptions} style={{ minHeight: 56, borderRadius: 14, backgroundColor: "white", borderWidth: 1, borderColor: line, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11 }}><Plane size={18} color={purple} /><View style={{ flex: 1 }}><Text style={{ color: ink, fontWeight: "700", fontSize: 13 }}>Flight details</Text><Text style={{ color: muted, fontSize: 10, marginTop: 2 }}>Enter a flight and manage alerts</Text></View><ChevronRight size={17} color={muted} /></Pressable>
+      {trip?.owner_id === user?.id && <View style={{ borderTopWidth: 1, borderTopColor: line, marginTop: 4, paddingTop: 10 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Delete trip" onPress={deleteTripFromOptions} style={{ minHeight: 56, borderRadius: 14, backgroundColor: "#FFF7F8", borderWidth: 1, borderColor: "#F3DDE2", paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11 }}><Trash2 size={18} color="#B43F60" /><View style={{ flex: 1 }}><Text style={{ color: "#B43F60", fontWeight: "700", fontSize: 13 }}>Delete trip</Text><Text style={{ color: "#9A6B78", fontSize: 10, marginTop: 2 }}>Permanently delete this trip</Text></View><ChevronRight size={17} color="#B43F60" /></Pressable>
+      </View>}
     </BottomSheet>
     <BottomSheet visible={manageOpen} title="Trip details" onClose={() => { if (!managementBusy) setManageOpen(false); }} busy={managementBusy}>
       <Text style={{ color: muted, fontSize: 12, lineHeight: 18 }}>View trip members, invite friends, and manage trip settings.</Text>
@@ -550,9 +557,9 @@ export default function TripWorkspace({ mode }: { mode: ScreenMode }) {
         {memberMatch && <View style={{ minHeight: 52, borderRadius: 14, backgroundColor: pale, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 }}><UsersRound size={17} color={purple} /><View style={{ flex: 1 }}><Text style={{ color: ink, fontSize: 12, fontWeight: "700" }}>{memberMatch.display_name || memberMatch.username}</Text><Text style={{ color: muted, fontSize: 10 }}>@{memberMatch.username}</Text></View><Pressable accessibilityRole="button" disabled={managementBusy} onPress={() => void addTripMember()} style={{ minHeight: 34, borderRadius: 17, backgroundColor: "white", paddingHorizontal: 14, justifyContent: "center" }}><Text style={{ color: purple, fontSize: 11, fontWeight: "700" }}>Add</Text></Pressable></View>}
       </View>}
       {!!managementError && <Text accessibilityRole="alert" style={{ color: "#B43F60", fontSize: 11, lineHeight: 16 }}>{managementError}</Text>}
-      <View style={{ borderTopWidth: 1, borderTopColor: line, paddingTop: 12, gap: 9 }}>
-        {trip?.owner_id === user?.id ? <Pressable accessibilityRole="button" onPress={() => requestTripAction({ kind: "delete-trip" })} style={{ minHeight: 46, borderRadius: 24, backgroundColor: "#FFF2F4", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }}><Trash2 size={16} color="#B43F60" /><Text style={{ color: "#B43F60", fontWeight: "700", fontSize: 12 }}>Delete trip</Text></Pressable> : <Pressable accessibilityRole="button" onPress={() => requestTripAction({ kind: "leave-trip" })} style={{ minHeight: 46, borderRadius: 24, backgroundColor: pale, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }}><LogOut size={16} color={purple} /><Text style={{ color: purple, fontWeight: "700", fontSize: 12 }}>Leave trip</Text></Pressable>}
-      </View>
+      {trip?.owner_id !== user?.id && <View style={{ borderTopWidth: 1, borderTopColor: line, paddingTop: 12, gap: 9 }}>
+        <Pressable accessibilityRole="button" onPress={() => requestTripAction({ kind: "leave-trip" })} style={{ minHeight: 46, borderRadius: 24, backgroundColor: pale, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }}><LogOut size={16} color={purple} /><Text style={{ color: purple, fontWeight: "700", fontSize: 12 }}>Leave trip</Text></Pressable>
+      </View>}
     </BottomSheet>
     <Modal visible={tripAction !== null} transparent animationType="fade" onRequestClose={() => { if (!deleting) setTripAction(null); }}>
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, backgroundColor: "rgba(25, 12, 35, 0.4)" }}>

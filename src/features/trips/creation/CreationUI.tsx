@@ -120,8 +120,8 @@ export function WizardFrame({
         </View>
         <ScrollView
           style={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
         >

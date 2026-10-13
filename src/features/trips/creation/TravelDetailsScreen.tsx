@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarDays,
   Lightbulb,
@@ -27,15 +27,29 @@ const destinations = ["Bali", "Tokyo", "Seoul", "Bangkok"];
 export default function TravelDetailsScreen() {
   const { data, update } = useTripCreation();
   const [formError, setFormError] = useState("");
-  function chooseDestination(value: string) {
+  const [destinationError, setDestinationError] = useState("");
+  const [destinationDraft, setDestinationDraft] = useState(data.destination);
+
+  useEffect(() => {
+    setDestinationDraft(data.destination);
+  }, [data.destination]);
+
+  function commitDestination(value = destinationDraft) {
     update({ destination: value, title: "" });
+  }
+
+  function chooseDestination(value: string) {
+    setDestinationDraft(value);
+    update({ destination: value, title: "" });
+    setDestinationError("");
     setFormError("");
   }
   function continueToPreferences() {
-    if (!data.destination.trim()) {
-      setFormError("Add a destination to continue.");
+    if (!destinationDraft.trim()) {
+      setDestinationError("Add a destination to continue.");
       return;
     }
+    setDestinationError("");
     const start = data.startDate.trim();
     const end = data.endDate.trim();
     if (!!start !== !!end) {
@@ -61,6 +75,7 @@ export default function TravelDetailsScreen() {
       }
     }
     setFormError("");
+    commitDestination();
     router.push("/trips/create/preferences");
   }
   return (
@@ -81,10 +96,19 @@ export default function TravelDetailsScreen() {
         <View style={styles.searchInput}>
           <Search size={17} color={tripColors.dark} />
           <TextInput
-            value={data.destination}
-            onChangeText={chooseDestination}
-            placeholder="Bali, Indonesia"
-            placeholderTextColor="#4C3B61"
+            value={destinationDraft}
+            onChangeText={(value) => {
+              setDestinationDraft(value);
+              setDestinationError("");
+              setFormError("");
+            }}
+            onBlur={() => commitDestination()}
+            placeholder="e.g. Bali, Indonesia"
+            placeholderTextColor="#A99BB6"
+            autoCapitalize="words"
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="off"
             style={styles.destinationField}
           />
           <Pressable
@@ -99,7 +123,7 @@ export default function TravelDetailsScreen() {
         <View style={styles.chips}>
           {destinations.map((place) => {
             const selected =
-              place.toLowerCase() === data.destination.toLowerCase();
+              place.toLowerCase() === destinationDraft.toLowerCase();
             return (
               <Pressable
                 key={place}
@@ -117,6 +141,11 @@ export default function TravelDetailsScreen() {
             );
           })}
         </View>
+        {!!destinationError && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {destinationError}
+          </Text>
+        )}
       </View>
 
       <View style={[uiStyles.card, { marginHorizontal: -10 }]}>
@@ -193,8 +222,8 @@ export default function TravelDetailsScreen() {
               Estimated cost for {data.destination || "your trip"}
               {dateSummary(data.startDate, data.endDate)}
             </Text>
-                        <CostEstimateText
-              destination={data.destination}
+            <CostEstimateText
+              destination={destinationDraft}
               startDate={data.startDate}
               endDate={data.endDate}
               style={styles.estimateBody}
@@ -286,6 +315,12 @@ const styles = {
   chipSelected: { backgroundColor: "#8050C5" },
   chipText: { color: "#776788", fontFamily: "Inter", fontSize: 12 },
   chipTextSelected: { color: "white" },
+  error: {
+    color: "#B43F60",
+    fontFamily: "Inter",
+    fontSize: 11,
+    marginTop: 8,
+  },
   dateRow: { flexDirection: "row" as const, gap: 12 },
   dateLabel: {
     color: "#857695",
